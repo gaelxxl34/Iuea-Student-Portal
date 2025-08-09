@@ -65,9 +65,10 @@ export default function VerifyEmailPage() {
       setResendMessage('');
       await resendVerificationEmail();
       setResendMessage('Verification email sent successfully! Please check your inbox.');
-    } catch (error: any) {
+    } catch (error: unknown) {
       console.error('Error resending verification email:', error);
-      if (error.message === 'Email is already verified') {
+      const errorMessage = error instanceof Error ? error.message : 'Unknown error';
+      if (errorMessage === 'Email is already verified') {
         setResendMessage('Your email is already verified!');
         router.push('/dashboard');
       } else {
@@ -169,7 +170,7 @@ export default function VerifyEmailPage() {
 
           <div className="pt-4 border-t border-gray-200">
             <p className="text-sm text-[#333333]/60 mb-3">
-              Didn't receive the email? Check your spam folder.
+              Didn&apos;t receive the email? Check your spam folder.
             </p>
             <Link 
               href="/login" 

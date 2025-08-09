@@ -2,6 +2,7 @@
 
 import { useState } from 'react';
 import Link from 'next/link';
+import Image from 'next/image';
 import { useAuth } from '@/contexts/AuthContext';
 
 export default function ForgotPasswordPage() {
@@ -36,15 +37,16 @@ export default function ForgotPasswordPage() {
     try {
       await resetPassword(email);
       setIsSubmitted(true);
-    } catch (error: any) {
+    } catch (error: unknown) {
       console.error('Password reset error:', error);
       
       // Handle specific Firebase auth errors
-      if (error.code === 'auth/user-not-found') {
+      const errorMessage = error instanceof Error ? error.message : 'Unknown error';
+      if (errorMessage.includes('auth/user-not-found')) {
         setErrors({ email: 'No account found with this email address' });
-      } else if (error.code === 'auth/invalid-email') {
+      } else if (errorMessage.includes('auth/invalid-email')) {
         setErrors({ email: 'Invalid email address' });
-      } else if (error.code === 'auth/too-many-requests') {
+      } else if (errorMessage.includes('auth/too-many-requests')) {
         setErrors({ general: 'Too many attempts. Please try again later.' });
       } else {
         setErrors({ general: 'Failed to send reset email. Please try again.' });
@@ -74,18 +76,22 @@ export default function ForgotPasswordPage() {
           <div className="w-full max-w-md mx-auto text-center">
             {/* Mobile Brand Header */}
             <div className="lg:hidden mb-6">
-              <img 
+              <Image 
                 src="https://iuea.ac.ug/sitepad-data/uploads/2020/11/Website-Logo.png" 
                 alt="IUEA Logo" 
+                width={128}
+                height={128}
                 className="w-32 h-32 mx-auto mb-3 object-contain"
               />
             </div>
 
             {/* Desktop Header */}
             <div className="hidden lg:block mb-6">
-              <img 
+              <Image 
                 src="https://iuea.ac.ug/sitepad-data/uploads/2020/11/Website-Logo.png" 
                 alt="IUEA Logo" 
+                width={160}
+                height={160}
                 className="w-40 h-40 mx-auto mb-3 object-contain"
               />
             </div>
@@ -97,11 +103,11 @@ export default function ForgotPasswordPage() {
               </div>
               <h2 className="text-2xl font-bold text-[#333333] mb-2">Check Your Email</h2>
               <p className="text-[#333333]/70 mb-4">
-                We've sent a password reset link to:
+                We&apos;ve sent a password reset link to:
               </p>
               <p className="text-[#780000] font-medium mb-4">{email}</p>
               <p className="text-sm text-[#333333]/60">
-                Click the link in your email to reset your password. If you don't see it, check your spam folder.
+                Click the link in your email to reset your password. If you don&apos;t see it, check your spam folder.
               </p>
             </div>
 
@@ -149,9 +155,11 @@ export default function ForgotPasswordPage() {
         <div className="w-full max-w-md mx-auto">
           {/* Mobile Brand Header */}
           <div className="lg:hidden text-center mb-6">
-            <img 
+            <Image 
               src="https://iuea.ac.ug/sitepad-data/uploads/2020/11/Website-Logo.png" 
               alt="IUEA Logo" 
+              width={128}
+              height={128}
               className="w-32 h-32 mx-auto mb-3 object-contain"
             />
             <h1 className="text-xl font-bold text-[#333333] mb-2">Reset Password</h1>
@@ -160,9 +168,11 @@ export default function ForgotPasswordPage() {
 
           {/* Desktop Header */}
           <div className="hidden lg:block text-center mb-6">
-            <img 
+            <Image 
               src="https://iuea.ac.ug/sitepad-data/uploads/2020/11/Website-Logo.png" 
               alt="IUEA Logo" 
+              width={160}
+              height={160}
               className="w-40 h-40 mx-auto mb-3 object-contain"
             />
             <h2 className="text-2xl font-bold text-[#333333] mb-1">Reset Password</h2>
@@ -209,7 +219,7 @@ export default function ForgotPasswordPage() {
               <div className="flex items-start gap-2">
                 <i className="ri-information-line text-blue-600 text-sm mt-0.5"></i>
                 <p className="text-xs text-blue-700">
-                  We'll send you a secure link to reset your password. Make sure to check your spam folder if you don't see the email within a few minutes.
+                  We&apos;ll send you a secure link to reset your password. Make sure to check your spam folder if you don&apos;t see the email within a few minutes.
                 </p>
               </div>
             </div>

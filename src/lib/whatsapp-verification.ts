@@ -6,16 +6,6 @@ interface WhatsAppVerificationResponse {
   phoneNumber?: string;
 }
 
-interface MaytapiResponse {
-  success: boolean;
-  result?: {
-    canReceiveMessage: boolean;
-    jid: string;
-  };
-  message?: string;
-  error?: string;
-}
-
 export class WhatsAppVerificationService {
   private static readonly PRODUCT_ID = process.env.NEXT_PUBLIC_MAYTAPI_PRODUCT_ID || 'eae79c59-f48d-4fd2-9feb-c65fc1d317df';
   private static readonly TOKEN = process.env.NEXT_PUBLIC_MAYTAPI_TOKEN || '4dba0328-0c7e-4749-9b39-588ec18259cb';
@@ -63,17 +53,18 @@ export class WhatsAppVerificationService {
         throw new Error(`HTTP error! status: ${response.status}`);
       }
 
-      const data: any = await response.json();
+      const data: unknown = await response.json();
+      const apiResponse = data as { success?: boolean; result?: { canReceiveMessage?: boolean }; message?: string };
 
       // Based on your working code, check for success and canReceiveMessage
-      if (data.success && data.result && data.result.canReceiveMessage) {
+      if (apiResponse.success && apiResponse.result && apiResponse.result.canReceiveMessage) {
         return {
           success: true,
           exists: true,
           message: 'Phone number is registered on WhatsApp',
           phoneNumber: cleanNumber
         };
-      } else if (data.success && data.result && !data.result.canReceiveMessage) {
+      } else if (apiResponse.success && apiResponse.result && !apiResponse.result.canReceiveMessage) {
         return {
           success: true,
           exists: false,
@@ -84,7 +75,7 @@ export class WhatsAppVerificationService {
         return {
           success: false,
           exists: false,
-          message: data.message || 'Failed to verify phone number'
+          message: apiResponse.message || 'Failed to verify phone number'
         };
       }
     } catch (error) {

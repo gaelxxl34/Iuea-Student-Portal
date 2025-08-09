@@ -1,12 +1,13 @@
 'use client';
 
-import { useState, useEffect } from 'react';
+import { useState, useEffect, Suspense } from 'react';
 import Link from 'next/link';
+import Image from 'next/image';
 import { useRouter, useSearchParams } from 'next/navigation';
 import { confirmPasswordReset, verifyPasswordResetCode } from 'firebase/auth';
 import { auth } from '@/lib/firebase';
 
-export default function ResetPasswordPage() {
+function ResetPasswordForm() {
   const router = useRouter();
   const searchParams = useSearchParams();
   const [formData, setFormData] = useState({
@@ -95,14 +96,15 @@ export default function ResetPasswordPage() {
       await confirmPasswordReset(auth, oobCode!, formData.password);
       // Password reset successful - redirect to login with success message
       router.push('/login?message=password-reset-success');
-    } catch (error: any) {
+    } catch (error: unknown) {
       console.error('Password reset error:', error);
       
-      if (error.code === 'auth/expired-action-code') {
+      const errorMessage = error instanceof Error ? error.message : 'Unknown error';
+      if (errorMessage.includes('auth/expired-action-code')) {
         setErrors({ general: 'This password reset link has expired. Please request a new one.' });
-      } else if (error.code === 'auth/invalid-action-code') {
+      } else if (errorMessage.includes('auth/invalid-action-code')) {
         setErrors({ general: 'This password reset link is invalid. Please request a new one.' });
-      } else if (error.code === 'auth/weak-password') {
+      } else if (errorMessage.includes('auth/weak-password')) {
         setErrors({ password: 'Password is too weak' });
       } else {
         setErrors({ general: 'Failed to reset password. Please try again.' });
@@ -174,9 +176,11 @@ export default function ResetPasswordPage() {
         <div className="w-full max-w-md mx-auto">
           {/* Mobile Brand Header */}
           <div className="lg:hidden text-center mb-6">
-            <img 
+            <Image 
               src="https://iuea.ac.ug/sitepad-data/uploads/2020/11/Website-Logo.png" 
               alt="IUEA Logo" 
+              width={128}
+              height={128}
               className="w-32 h-32 mx-auto mb-3 object-contain"
             />
             <h1 className="text-xl font-bold text-[#333333] mb-2">Set New Password</h1>
@@ -185,9 +189,11 @@ export default function ResetPasswordPage() {
 
           {/* Desktop Header */}
           <div className="hidden lg:block text-center mb-6">
-            <img 
+            <Image 
               src="https://iuea.ac.ug/sitepad-data/uploads/2020/11/Website-Logo.png" 
               alt="IUEA Logo" 
+              width={160}
+              height={160}
               className="w-40 h-40 mx-auto mb-3 object-contain"
             />
             <h2 className="text-2xl font-bold text-[#333333] mb-1">Set New Password</h2>
@@ -324,5 +330,20 @@ export default function ResetPasswordPage() {
         </div>
       </div>
     </div>
+  );
+}
+
+export default function ResetPasswordPage() {
+  return (
+    <Suspense fallback={
+      <div className="min-h-screen bg-[#F7F7F7] flex items-center justify-center">
+        <div className="text-center">
+          <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-[#780000] mx-auto mb-4"></div>
+          <p className="text-slate-600">Loading...</p>
+        </div>
+      </div>
+    }>
+      <ResetPasswordForm />
+    </Suspense>
   );
 }

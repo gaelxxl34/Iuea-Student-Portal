@@ -1,7 +1,6 @@
 'use client';
 
 import { useState } from 'react';
-import Link from 'next/link';
 
 export default function ApplicationPage() {
   // Application form sections - matching frontend structure exactly
@@ -503,7 +502,7 @@ export default function ApplicationPage() {
                   rows={4}
                   className="w-full px-3 py-2 rounded-lg border-2 border-slate-200 text-sm bg-[#f7f7f7] resize-none"
                 />
-                <p className="text-xs text-slate-500 mt-1">Any additional information you'd like to share (optional)</p>
+                <p className="text-xs text-slate-500 mt-1">                <span>Any additional information you&apos;d like to share (optional)</span></p>
               </div>
               
               <div className="mt-6 flex flex-col sm:flex-row sm:justify-between gap-3">

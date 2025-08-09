@@ -2,6 +2,7 @@
 
 import { useState, useEffect } from 'react';
 import Link from 'next/link';
+import Image from 'next/image';
 import { usePathname, useRouter } from 'next/navigation';
 import { useAuth } from '@/contexts/AuthContext';
 import ProtectedRoute from '@/components/ProtectedRoute';
@@ -101,9 +102,11 @@ export default function DashboardLayout({ children }: DashboardLayoutProps) {
         <header className="bg-white border-b border-slate-200 py-3 px-4 flex items-center justify-between z-10">
           {/* Logo */}
           <div className="flex items-center">
-            <img 
+            <Image 
               src="https://iuea.ac.ug/sitepad-data/uploads/2020/11/Website-Logo.png" 
               alt="IUEA Logo" 
+              width={120}
+              height={48}
               className="h-12 w-auto object-contain"
             />
           </div>

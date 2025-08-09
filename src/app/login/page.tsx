@@ -1,11 +1,12 @@
 'use client';
 
-import { useState, useEffect } from 'react';
+import { useState, useEffect, Suspense } from 'react';
 import Link from 'next/link';
+import Image from 'next/image';
 import { useRouter, useSearchParams } from 'next/navigation';
 import { useAuth } from '@/contexts/AuthContext';
 
-export default function LoginPage() {
+function LoginForm() {
   const router = useRouter();
   const searchParams = useSearchParams();
   const { user, signIn, signInUnverified, loading } = useAuth();
@@ -86,10 +87,11 @@ export default function LoginPage() {
       await signIn(formData.email, formData.password);
       // If successful, redirect to dashboard
       router.push('/dashboard');
-    } catch (error: any) {
+    } catch (error: unknown) {
       console.error('Login error:', error);
       
-      if (error.message === 'EMAIL_NOT_VERIFIED') {
+      const errorMessage = error instanceof Error ? error.message : 'Unknown error';
+      if (errorMessage === 'EMAIL_NOT_VERIFIED') {
         // If email is not verified, sign them in with unverified login
         try {
           const user = await signInUnverified(formData.email, formData.password);
@@ -103,25 +105,26 @@ export default function LoginPage() {
             // User is truly not verified, redirect to verification page
             router.push('/verify-email');
           }
-        } catch (unverifiedError: any) {
+        } catch (unverifiedError: unknown) {
           console.error('Unverified login error:', unverifiedError);
-          if (unverifiedError.code === 'auth/user-not-found') {
+          const unverifiedErrorMessage = unverifiedError instanceof Error ? unverifiedError.message : 'Unknown error';
+          if (unverifiedErrorMessage.includes('auth/user-not-found')) {
             setErrors({ email: 'No account found with this email address' });
-          } else if (unverifiedError.code === 'auth/wrong-password') {
+          } else if (unverifiedErrorMessage.includes('auth/wrong-password')) {
             setErrors({ password: 'Incorrect password' });
-          } else if (unverifiedError.code === 'auth/invalid-email') {
+          } else if (unverifiedErrorMessage.includes('auth/invalid-email')) {
             setErrors({ email: 'Invalid email address' });
           } else {
             setErrors({ general: 'Failed to sign in. Please try again.' });
           }
         }
-      } else if (error.code === 'auth/user-not-found') {
+      } else if (errorMessage.includes('auth/user-not-found')) {
         setErrors({ email: 'No account found with this email address' });
-      } else if (error.code === 'auth/wrong-password') {
+      } else if (errorMessage.includes('auth/wrong-password')) {
         setErrors({ password: 'Incorrect password' });
-      } else if (error.code === 'auth/invalid-email') {
+      } else if (errorMessage.includes('auth/invalid-email')) {
         setErrors({ email: 'Invalid email address' });
-      } else if (error.code === 'auth/too-many-requests') {
+      } else if (errorMessage.includes('auth/too-many-requests')) {
         setErrors({ general: 'Too many failed attempts. Please try again later.' });
       } else {
         setErrors({ general: 'Failed to sign in. Please try again.' });
@@ -150,9 +153,11 @@ export default function LoginPage() {
         <div className="w-full max-w-md mx-auto">
           {/* Mobile Brand Header */}
           <div className="lg:hidden text-center mb-6">
-            <img 
+            <Image 
               src="https://iuea.ac.ug/sitepad-data/uploads/2020/11/Website-Logo.png" 
               alt="IUEA Logo" 
+              width={128}
+              height={128}
               className="w-32 h-32 mx-auto mb-3 object-contain"
             />
             <h1 className="text-xl font-bold text-[#333333] mb-2">Welcome Back</h1>
@@ -161,9 +166,11 @@ export default function LoginPage() {
 
           {/* Desktop Header */}
           <div className="hidden lg:block text-center mb-6">
-            <img 
+            <Image 
               src="https://iuea.ac.ug/sitepad-data/uploads/2020/11/Website-Logo.png" 
               alt="IUEA Logo" 
+              width={160}
+              height={160}
               className="w-40 h-40 mx-auto mb-3 object-contain"
             />
             <h2 className="text-2xl font-bold text-[#333333] mb-1">Welcome Back</h2>
@@ -268,7 +275,7 @@ export default function LoginPage() {
             {/* Sign Up Link */}
             <div className="text-center">
               <p className="text-sm text-[#333333]">
-                Don't have an account?{` `} 
+                Don&apos;t have an account?{` `} 
                 <Link href="/signup" className="text-[#780000] hover:underline font-medium">
                   Create account
                 </Link>
@@ -278,5 +285,20 @@ export default function LoginPage() {
         </div>
       </div>
     </div>
+  );
+}
+
+export default function LoginPage() {
+  return (
+    <Suspense fallback={
+      <div className="min-h-screen bg-slate-50 flex items-center justify-center">
+        <div className="flex flex-col items-center space-y-4">
+          <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-[#780000]"></div>
+          <p className="text-slate-600 text-sm">Loading...</p>
+        </div>
+      </div>
+    }>
+      <LoginForm />
+    </Suspense>
   );
 }

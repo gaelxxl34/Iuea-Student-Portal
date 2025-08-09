@@ -3,13 +3,12 @@
 
 import { useState } from 'react';
 import Link from 'next/link';
-import { useRouter } from 'next/navigation';
+import Image from 'next/image';
 import PhoneInput from 'react-phone-number-input';
 import WhatsAppVerificationService from '@/lib/whatsapp-verification';
 import { useAuth } from '@/contexts/AuthContext';
 
 export default function SignUpPage() {
-  const router = useRouter();
   const { signUp } = useAuth();
   const [formData, setFormData] = useState({
     firstName: '',
@@ -131,15 +130,16 @@ export default function SignUpPage() {
 
       // Show email verification message
       setEmailSent(true);
-    } catch (error: any) {
+    } catch (error: unknown) {
       console.error('Signup error:', error);
       
       // Handle specific Firebase auth errors
-      if (error.code === 'auth/email-already-in-use') {
+      const errorMessage = error instanceof Error ? error.message : 'Unknown error';
+      if (errorMessage.includes('auth/email-already-in-use')) {
         setErrors({ email: 'An account with this email already exists' });
-      } else if (error.code === 'auth/weak-password') {
+      } else if (errorMessage.includes('auth/weak-password')) {
         setErrors({ password: 'Password is too weak' });
-      } else if (error.code === 'auth/invalid-email') {
+      } else if (errorMessage.includes('auth/invalid-email')) {
         setErrors({ email: 'Invalid email address' });
       } else {
         setErrors({ general: 'Failed to create account. Please try again.' });
@@ -159,12 +159,12 @@ export default function SignUpPage() {
           </div>
           <h2 className="text-2xl font-bold text-[#333333] mb-2">Check Your Email</h2>
           <p className="text-[#333333]/70 mb-6">
-            We've sent a verification link to <strong>{formData.email}</strong>. 
+            We&apos;ve sent a verification link to <strong>{formData.email}</strong>. 
             Please check your email and click the verification link to activate your account.
           </p>
           <div className="space-y-3">
             <p className="text-sm text-[#333333]/60">
-              Didn't receive the email? Check your spam folder or{' '}
+              Didn&apos;t receive the email? Check your spam folder or{' '}
               <button 
                 onClick={() => setEmailSent(false)}
                 className="text-[#780000] hover:underline font-medium"
@@ -203,9 +203,11 @@ export default function SignUpPage() {
         <div className="w-full max-w-md mx-auto py-6 lg:py-0">
           {/* Mobile Brand Header */}
           <div className="lg:hidden text-center mb-6">
-            <img 
+            <Image 
               src="https://iuea.ac.ug/sitepad-data/uploads/2020/11/Website-Logo.png" 
               alt="IUEA Logo" 
+              width={128}
+              height={128}
               className="w-32 h-32 mx-auto mb-3 object-contain"
             />
             <h1 className="text-xl font-bold text-[#333333] mb-2">Welcome to IUEA</h1>
@@ -214,9 +216,11 @@ export default function SignUpPage() {
 
           {/* Desktop Header - Bigger Logo */}
           <div className="hidden lg:block text-center mb-6">
-            <img 
+            <Image 
               src="https://iuea.ac.ug/sitepad-data/uploads/2020/11/Website-Logo.png" 
               alt="IUEA Logo" 
+              width={160}
+              height={160}
               className="w-40 h-40 mx-auto mb-3 object-contain"
             />
             <h2 className="text-2xl font-bold text-[#333333] mb-1">Create Account</h2>
