@@ -16,6 +16,11 @@ const geistMono = Geist_Mono({
 export const metadata: Metadata = {
   title: "IUEA Student Portal",
   description: "International University of East Africa student portal for course management, assignments, and academic resources",
+  icons: {
+    icon: "/small logo iuea.png",
+    shortcut: "/small logo iuea.png",
+    apple: "/small logo iuea.png",
+  },
 };
 
 export default function RootLayout({

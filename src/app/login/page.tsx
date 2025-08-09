@@ -8,7 +8,7 @@ import { useAuth } from '@/contexts/AuthContext';
 export default function LoginPage() {
   const router = useRouter();
   const searchParams = useSearchParams();
-  const { signIn, signInUnverified } = useAuth();
+  const { user, signIn, signInUnverified, loading } = useAuth();
   const [formData, setFormData] = useState({
     email: '',
     password: ''
@@ -19,6 +19,13 @@ export default function LoginPage() {
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [successMessage, setSuccessMessage] = useState('');
 
+  // Redirect if user is already authenticated
+  useEffect(() => {
+    if (!loading && user && user.emailVerified) {
+      router.push('/dashboard');
+    }
+  }, [user, loading, router]);
+
   useEffect(() => {
     // Check for success messages from URL params
     const message = searchParams.get('message');
@@ -26,6 +33,23 @@ export default function LoginPage() {
       setSuccessMessage('Password reset successful! You can now log in with your new password.');
     }
   }, [searchParams]);
+
+  // Show loading if still checking authentication
+  if (loading) {
+    return (
+      <div className="min-h-screen bg-slate-50 flex items-center justify-center">
+        <div className="flex flex-col items-center space-y-4">
+          <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-[#780000]"></div>
+          <p className="text-slate-600 text-sm">Loading...</p>
+        </div>
+      </div>
+    );
+  }
+
+  // Don't show login form if user is authenticated
+  if (user && user.emailVerified) {
+    return null;
+  }
 
   const handleInputChange = (field: string, value: string) => {
     setFormData(prev => ({ ...prev, [field]: value }));

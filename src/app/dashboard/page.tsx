@@ -68,15 +68,15 @@ export default function Dashboard() {
 
   // Programs of interest
   const programsOfInterest = [
-    { id: 1, name: 'Bachelor of Science in Computer Science', faculty: 'Faculty of Computing & Engineering', deadline: 'Sep 15, 2025', tuition: '$2,500 / semester' },
-    { id: 2, name: 'Bachelor of Business Administration', faculty: 'Faculty of Business & Management', deadline: 'Sep 15, 2025', tuition: '$2,300 / semester' },
+    { id: 1, name: 'Bachelor of Science in Computer Science', faculty: 'Faculty of Computing & Engineering', deadline: 'Aug 15, 2025', tuition: '$2,500 / semester' },
+    { id: 2, name: 'Bachelor of Business Administration', faculty: 'Faculty of Business & Management', deadline: 'Aug 15, 2025', tuition: '$2,300 / semester' },
   ];
 
   // Admission announcements
   const admissionAnnouncements = [
-    { id: 1, title: 'Fall 2025 Application Deadline Extended', date: 'Aug 5, 2025', type: 'Important' },
+    { id: 1, title: 'August 2025 Application Deadline Extended', date: 'Aug 5, 2025', type: 'Important' },
     { id: 2, title: 'Required Documents Submission Reminder', date: 'Aug 3, 2025', type: 'Reminder' },
-    { id: 3, title: 'New Programs Added for Fall Intake', date: 'Aug 1, 2025', type: 'Update' },
+    { id: 3, title: 'New Programs Added for August Intake', date: 'Aug 1, 2025', type: 'Update' },
   ];
 
   return (
@@ -94,7 +94,7 @@ export default function Dashboard() {
         <div className="flex flex-col md:flex-row md:items-center md:justify-between gap-3 md:gap-4">
           <div>
             <h2 className="text-base md:text-lg font-semibold text-slate-800">Application Status</h2>
-            <p className="text-xs md:text-sm text-slate-600 mt-1">Fall Semester 2025</p>
+            <p className="text-xs md:text-sm text-slate-600 mt-1">August Intake 2025</p>
           </div>
           
           <div className="flex items-center">
