@@ -1,0 +1,136 @@
+// WhatsApp number verification service using MAYTAPI
+interface WhatsAppVerificationResponse {
+  success: boolean;
+  exists: boolean;
+  message: string;
+  phoneNumber?: string;
+}
+
+interface MaytapiResponse {
+  success: boolean;
+  result?: {
+    canReceiveMessage: boolean;
+    jid: string;
+  };
+  message?: string;
+  error?: string;
+}
+
+export class WhatsAppVerificationService {
+  private static readonly PRODUCT_ID = process.env.NEXT_PUBLIC_MAYTAPI_PRODUCT_ID || 'eae79c59-f48d-4fd2-9feb-c65fc1d317df';
+  private static readonly TOKEN = process.env.NEXT_PUBLIC_MAYTAPI_TOKEN || '4dba0328-0c7e-4749-9b39-588ec18259cb';
+  private static readonly PHONE_ID = process.env.NEXT_PUBLIC_MAYTAPI_PHONE_ID || '104228';
+  private static readonly API_BASE_URL = 'https://api.maytapi.com/api';
+
+  /**
+   * Verify if a phone number is registered on WhatsApp
+   * @param phoneNumber - The phone number to verify (in international format)
+   * @returns Promise<WhatsAppVerificationResponse>
+   */
+  static async verifyWhatsAppNumber(phoneNumber: string): Promise<WhatsAppVerificationResponse> {
+    try {
+      // Clean and format phone number
+      const cleanNumber = this.formatPhoneNumber(phoneNumber);
+      
+      if (!cleanNumber) {
+        return {
+          success: false,
+          exists: false,
+          message: 'Invalid phone number format'
+        };
+      }
+
+      // Remove + and format for MAYTAPI (they expect just digits)
+      const phoneDigits = cleanNumber.replace(/\D/g, '');
+      
+      // Construct the correct endpoint based on your working code
+      const url = `${this.API_BASE_URL}/${this.PRODUCT_ID}/${this.PHONE_ID}/checkNumberStatus`;
+      
+      // Use URLSearchParams for query parameters
+      const params = new URLSearchParams({
+        token: this.TOKEN,
+        number: `${phoneDigits}@c.us`  // MAYTAPI expects this format
+      });
+
+      const response = await fetch(`${url}?${params.toString()}`, {
+        method: 'GET',
+        headers: {
+          'Accept': 'application/json'
+        }
+      });
+
+      if (!response.ok) {
+        throw new Error(`HTTP error! status: ${response.status}`);
+      }
+
+      const data: any = await response.json();
+
+      // Based on your working code, check for success and canReceiveMessage
+      if (data.success && data.result && data.result.canReceiveMessage) {
+        return {
+          success: true,
+          exists: true,
+          message: 'Phone number is registered on WhatsApp',
+          phoneNumber: cleanNumber
+        };
+      } else if (data.success && data.result && !data.result.canReceiveMessage) {
+        return {
+          success: true,
+          exists: false,
+          message: 'This number is not registered on WhatsApp',
+          phoneNumber: cleanNumber
+        };
+      } else {
+        return {
+          success: false,
+          exists: false,
+          message: data.message || 'Failed to verify phone number'
+        };
+      }
+    } catch (error) {
+      console.error('WhatsApp verification error:', error);
+      return {
+        success: false,
+        exists: false,
+        message: error instanceof Error ? error.message : 'Network error occurred'
+      };
+    }
+  }
+
+  /**
+   * Format phone number for API request
+   * @param phoneNumber - Raw phone number input
+   * @returns Formatted phone number or null if invalid
+   */
+  private static formatPhoneNumber(phoneNumber: string): string | null {
+    if (!phoneNumber) return null;
+
+    // Remove all non-digit characters except +
+    let cleaned = phoneNumber.replace(/[^\d+]/g, '');
+    
+    // If it doesn't start with +, add it
+    if (!cleaned.startsWith('+')) {
+      cleaned = '+' + cleaned;
+    }
+
+    // Basic validation - should be at least 10 digits after country code
+    const digitsOnly = cleaned.replace(/\D/g, '');
+    if (digitsOnly.length < 10 || digitsOnly.length > 15) {
+      return null;
+    }
+
+    return cleaned;
+  }
+
+  /**
+   * Validate phone number format without API call
+   * @param phoneNumber - Phone number to validate
+   * @returns boolean indicating if format is valid
+   */
+  static isValidPhoneNumberFormat(phoneNumber: string): boolean {
+    const formatted = this.formatPhoneNumber(phoneNumber);
+    return formatted !== null;
+  }
+}
+
+export default WhatsAppVerificationService;

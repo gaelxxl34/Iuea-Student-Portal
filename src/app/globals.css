@@ -1,26 +1,151 @@
 @import "tailwindcss";
+@import "remixicon/fonts/remixicon.css";
+@import 'react-phone-number-input/style.css';
 
-:root {
-  --background: #ffffff;
-  --foreground: #171717;
-}
-
-@theme inline {
-  --color-background: var(--background);
-  --color-foreground: var(--foreground);
-  --font-sans: var(--font-geist-sans);
-  --font-mono: var(--font-geist-mono);
-}
-
-@media (prefers-color-scheme: dark) {
-  :root {
-    --background: #0a0a0a;
-    --foreground: #ededed;
-  }
-}
-
+/* Base styles */
 body {
-  background: var(--background);
-  color: var(--foreground);
-  font-family: Arial, Helvetica, sans-serif;
+  font-family: system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+  background-color: #f8fafc;
+  color: #1e293b;
+  line-height: 1.5;
+}
+
+/* PhoneInput styling */
+.PhoneInput {
+  display: flex;
+  align-items: center;
+}
+
+.PhoneInputCountry {
+  display: flex;
+  align-items: center;
+  margin-right: 8px;
+}
+
+.PhoneInputCountryIcon {
+  width: 1.5em !important;
+  height: 1.2em !important;
+  margin-right: 4px;
+}
+
+.PhoneInputCountrySelect {
+  background: transparent;
+  border: none;
+  outline: none;
+  color: #1e293b;
+  font-size: 0.875rem;
+  cursor: pointer;
+  padding: 0;
+  margin: 0;
+}
+
+.PhoneInputCountrySelectArrow {
+  width: 0.5em;
+  height: 0.5em;
+  margin-left: 4px;
+  opacity: 0.8;
+  color: #1e293b;
+}
+
+.PhoneInputInput {
+  flex: 1;
+  border: none;
+  outline: none;
+  background: transparent;
+  color: #1e293b !important;
+  font-size: 0.875rem;
+  padding: 0;
+  margin: 0;
+}
+
+.PhoneInputInput::placeholder {
+  color: #64748b !important;
+}
+
+/* Dashboard Components - Clean & Readable */
+
+/* Cards */
+.card {
+  background-color: #ffffff;
+  border-radius: 12px;
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.1);
+  border: 1px solid #e2e8f0;
+  padding: 1.5rem;
+  transition: box-shadow 0.2s ease;
+}
+
+.card:hover {
+  box-shadow: 0 4px 6px rgba(0, 0, 0, 0.1);
+}
+
+/* Dashboard Layout */
+.dashboard-sidebar {
+  background-color: #ffffff;
+  border-right: 1px solid #e2e8f0;
+  height: 100%;
+}
+
+.dashboard-content {
+  background-color: #f8fafc;
+  padding: 1.5rem;
+  height: 100%;
+}
+
+/* Mobile Navigation */
+.mobile-nav-item {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  padding: 0.75rem 0.5rem;
+  color: #9ca3af;
+  text-decoration: none;
+  transition: color 0.2s ease;
+}
+
+.mobile-nav-item:hover {
+  color: #f87171;
+}
+
+.mobile-nav-item-active {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  padding: 0.75rem 0.5rem;
+  color: #f87171;
+  font-weight: 500;
+  text-decoration: none;
+}
+
+/* Sidebar Navigation */
+.sidebar-item {
+  display: flex;
+  align-items: center;
+  gap: 0.75rem;
+  padding: 0.875rem 1rem;
+  color: #475569;
+  text-decoration: none;
+  border-radius: 8px;
+  margin: 0 0.5rem;
+  transition: all 0.2s ease;
+}
+
+.sidebar-item:hover {
+  background-color: #f1f5f9;
+  color: #780000;
+}
+
+.sidebar-active {
+  display: flex;
+  align-items: center;
+  gap: 0.75rem;
+  padding: 0.875rem 1rem;
+  background-color: #fef2f2;
+  color: #780000;
+  font-weight: 500;
+  border-radius: 8px;
+  margin: 0 0.5rem;
+  border-left: 4px solid #780000;
+  text-decoration: none;
 }
