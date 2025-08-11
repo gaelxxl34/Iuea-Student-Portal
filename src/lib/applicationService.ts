@@ -386,6 +386,40 @@ class StudentApplicationService {
   }
 
   /**
+   * Upload document to Firebase Storage and update Firestore with public URL by email
+   * Handles passport photos, academic documents, and identification documents
+   * Automatically deletes previous document to save storage space
+   */
+  async uploadDocumentAndUpdateFirestoreByEmail(email: string, upload: Omit<DocumentUpload, 'applicationId' | 'studentEmail'>): Promise<DocumentUploadResponse> {
+    try {
+      // Get applications by email to find the most recent one
+      const applications = await this.getApplicationsByEmail(email);
+      
+      if (applications.length === 0) {
+        throw new Error('No applications found for the provided email');
+      }
+
+      // Use the most recent application
+      const latestApplication = applications[0];
+      
+      // Create full upload object with application details
+      const fullUpload: DocumentUpload = {
+        ...upload,
+        applicationId: latestApplication.id,
+        studentEmail: email,
+      };
+
+      console.log(`📤 Uploading ${upload.type} for email ${email} (application ${latestApplication.id})...`);
+      
+      return await this.uploadDocumentAndUpdateFirestore(fullUpload);
+
+    } catch (error) {
+      console.error(`❌ Error uploading document by email:`, error);
+      throw error;
+    }
+  }
+
+  /**
    * Upload document to Firebase Storage and update Firestore with public URL
    * Handles passport photos, academic documents, and identification documents
    * Automatically deletes previous document to save storage space
@@ -732,6 +766,67 @@ class StudentApplicationService {
       statusBgColor,
       nextAction
     };
+  }
+
+  // Update existing application data by email
+  async updateApplicationDataByEmail(email: string, data: StudentApplicationData): Promise<{ success: boolean; message: string }> {
+    try {
+      // Ensure authentication
+      if (!auth.currentUser) {
+        await signInAnonymously(auth);
+      }
+
+      // Get applications by email to find the most recent one
+      const applications = await this.getApplicationsByEmail(email);
+      
+      if (applications.length === 0) {
+        return {
+          success: false,
+          message: 'No applications found for the provided email'
+        };
+      }
+
+      // Use the most recent application
+      const latestApplication = applications[0];
+      const applicationRef = doc(db, 'applications', latestApplication.id);
+
+      // Prepare update data
+      const updateData = {
+        name: `${data.firstName} ${data.lastName}`,
+        email: data.email,
+        phoneNumber: data.phone,
+        countryOfBirth: data.countryOfBirth,
+        gender: data.gender,
+        postalAddress: data.postalAddress,
+        preferredProgram: data.preferredProgram,
+        modeOfStudy: data.modeOfStudy,
+        preferredIntake: data.preferredIntake,
+        sponsorTelephone: data.sponsorTelephone || null,
+        sponsorEmail: data.sponsorEmail || null,
+        howDidYouHear: data.howDidYouHear || null,
+        additionalNotes: data.additionalNotes || null,
+        updatedAt: new Date().toISOString(),
+      };
+
+      // Update the application document
+      await updateDoc(applicationRef, updateData);
+
+      console.log(`✅ Successfully updated application: ${latestApplication.id} by email: ${email}`);
+
+      return {
+        success: true,
+        message: 'Application updated successfully'
+      };
+
+    } catch (error) {
+      console.error('❌ Error updating application by email:', error);
+      const errorMessage = error instanceof Error ? error.message : 'Unknown error occurred';
+      
+      return {
+        success: false,
+        message: `Failed to update application: ${errorMessage}`
+      };
+    }
   }
 
   // Update existing application data
