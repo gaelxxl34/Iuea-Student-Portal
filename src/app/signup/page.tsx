@@ -85,7 +85,7 @@ export default function SignUpPage() {
       
       if (result.success && result.exists) {
         setWhatsappVerified(true);
-        setWhatsappVerificationMessage('WhatsApp number verified successfully!');
+        setWhatsappVerificationMessage('');
       } else if (result.success && !result.exists) {
         setWhatsappVerified(false);
         setWhatsappVerificationMessage('This number is not registered on WhatsApp. Please use a valid WhatsApp number.');
