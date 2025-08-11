@@ -9,7 +9,7 @@ import { useAuth } from '@/contexts/AuthContext';
 function LoginForm() {
   const router = useRouter();
   const searchParams = useSearchParams();
-  const { user, signIn, signInUnverified, loading } = useAuth();
+  const { user, signInUnverified, loading } = useAuth();
   const [formData, setFormData] = useState({
     email: '',
     password: ''
@@ -83,42 +83,25 @@ function LoginForm() {
     setErrors({});
 
     try {
-      // First try regular sign in (for verified users)
-      await signIn(formData.email, formData.password);
-      // If successful, redirect to dashboard
-      router.push('/dashboard');
+      // Try to sign in the user
+      await signInUnverified(formData.email, formData.password);
+      
+      // After successful authentication, check if email is verified
+      const { checkEmailVerification } = await import('@/lib/auth');
+      const isVerified = await checkEmailVerification();
+      
+      if (isVerified) {
+        // User is verified, redirect to dashboard
+        router.push('/dashboard');
+      } else {
+        // User is not verified, redirect to verification page
+        router.push('/verify-email');
+      }
     } catch (error: unknown) {
       console.error('Login error:', error);
       
       const errorMessage = error instanceof Error ? error.message : 'Unknown error';
-      if (errorMessage === 'EMAIL_NOT_VERIFIED') {
-        // If email is not verified, sign them in with unverified login
-        try {
-          const user = await signInUnverified(formData.email, formData.password);
-          // Check if user is actually verified in Firebase Auth (sometimes there's a sync delay)
-          if (user.emailVerified) {
-            // User is verified in Firebase Auth, sync with Firestore and redirect to dashboard
-            const { checkEmailVerification } = await import('@/lib/auth');
-            await checkEmailVerification();
-            router.push('/dashboard');
-          } else {
-            // User is truly not verified, redirect to verification page
-            router.push('/verify-email');
-          }
-        } catch (unverifiedError: unknown) {
-          console.error('Unverified login error:', unverifiedError);
-          const unverifiedErrorMessage = unverifiedError instanceof Error ? unverifiedError.message : 'Unknown error';
-          if (unverifiedErrorMessage.includes('auth/user-not-found')) {
-            setErrors({ email: 'No account found with this email address' });
-          } else if (unverifiedErrorMessage.includes('auth/wrong-password')) {
-            setErrors({ password: 'Incorrect password' });
-          } else if (unverifiedErrorMessage.includes('auth/invalid-email')) {
-            setErrors({ email: 'Invalid email address' });
-          } else {
-            setErrors({ general: 'Failed to sign in. Please try again.' });
-          }
-        }
-      } else if (errorMessage.includes('auth/user-not-found')) {
+      if (errorMessage.includes('auth/user-not-found')) {
         setErrors({ email: 'No account found with this email address' });
       } else if (errorMessage.includes('auth/wrong-password')) {
         setErrors({ password: 'Incorrect password' });
@@ -140,7 +123,7 @@ function LoginForm() {
       <div 
         className="hidden lg:block lg:w-3/5 bg-cover bg-center bg-no-repeat"
         style={{
-          backgroundImage: `linear-gradient(135deg, rgba(120, 0, 0, 0.15) 0%, rgba(120, 0, 0, 0.1) 50%, rgba(120, 0, 0, 0.05) 100%), url('https://iuea.ac.ug/blog/wp-content/uploads/2024/11/WhatsApp-Image-2024-11-29-at-12.00.38_29c7f282.jpg')`,
+          backgroundImage: `linear-gradient(135deg, rgba(120, 0, 0, 0.15) 0%, rgba(120, 0, 0, 0.1) 50%, rgba(120, 0, 0, 0.05) 100%), url('/side image.jpg')`,
           backgroundSize: 'cover',
           backgroundPosition: 'center',
           backgroundRepeat: 'no-repeat'

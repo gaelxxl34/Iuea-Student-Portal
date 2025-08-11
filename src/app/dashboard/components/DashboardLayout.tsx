@@ -99,42 +99,42 @@ export default function DashboardLayout({ children }: DashboardLayoutProps) {
     <ProtectedRoute requireEmailVerification={true}>
       <div className="flex flex-col h-screen bg-slate-50">
         {/* Header */}
-        <header className="bg-white border-b border-slate-200 py-3 px-4 flex items-center justify-between z-10">
+        <header className="bg-white border-b border-slate-200 py-2 sm:py-3 px-3 sm:px-4 flex items-center justify-between z-10 min-h-[60px]">
           {/* Logo */}
           <div className="flex items-center">
             <Image 
               src="https://iuea.ac.ug/sitepad-data/uploads/2020/11/Website-Logo.png" 
               alt="IUEA Logo" 
-              width={120}
-              height={48}
-              className="h-12 w-auto object-contain"
+              width={isMobile ? 100 : 120}
+              height={isMobile ? 40 : 48}
+              className="h-8 sm:h-12 w-auto object-contain"
             />
           </div>
           
           {/* User profile dropdown */}
           <div className="relative">
-            <div className="flex items-center gap-2">
+            <div className="flex items-center gap-1 sm:gap-2">
               <div className="hidden sm:flex items-center text-sm text-slate-600 mr-2">
                 <span className="text-slate-700 font-medium">Student</span>
               </div>
               <div 
-                className="flex items-center gap-2 cursor-pointer hover:bg-slate-100 rounded-full p-1 transition-colors"
+                className="flex items-center gap-2 cursor-pointer hover:bg-slate-100 rounded-full p-2 transition-colors min-h-[44px] min-w-[44px]"
                 onClick={() => setShowProfileDropdown(!showProfileDropdown)}
               >
-                <div className="h-8 w-8 bg-[#780000] text-white rounded-full flex items-center justify-center text-sm font-medium">
+                <div className="h-7 w-7 sm:h-8 sm:w-8 bg-[#780000] text-white rounded-full flex items-center justify-center text-xs sm:text-sm font-medium">
                   {getInitials()}
                 </div>
                 <span className="hidden sm:block text-sm font-medium text-slate-700">{getDisplayName()}</span>
-                <i className="ri-arrow-down-s-line text-slate-400"></i>
+                <i className="ri-arrow-down-s-line text-slate-400 text-sm sm:text-base"></i>
               </div>
             </div>
             
             {/* Dropdown Menu */}
             {showProfileDropdown && (
-              <div className="absolute right-0 mt-2 w-56 bg-white rounded-lg shadow-lg border border-slate-200 py-1 z-20">
+              <div className="absolute right-0 mt-2 w-64 sm:w-56 bg-white rounded-lg shadow-lg border border-slate-200 py-1 z-20">
                 <div className="px-4 py-3 border-b border-slate-100">
-                  <p className="text-sm font-medium text-slate-900">{getDisplayName()}</p>
-                  <p className="text-xs text-slate-500">{getUserEmail()}</p>
+                  <p className="text-sm font-medium text-slate-900 truncate">{getDisplayName()}</p>
+                  <p className="text-xs text-slate-500 truncate">{getUserEmail()}</p>
                   {userData?.whatsappNumber && (
                     <p className="text-xs text-slate-500 mt-1">{userData.whatsappNumber}</p>
                   )}
@@ -147,17 +147,17 @@ export default function DashboardLayout({ children }: DashboardLayoutProps) {
                 </div>
                 <Link
                   href="/dashboard/profile"
-                  className="flex items-center w-full px-4 py-2 text-sm text-slate-700 hover:bg-slate-50"
+                  className="flex items-center w-full px-4 py-3 text-sm text-slate-700 hover:bg-slate-50 active:bg-slate-100 transition-colors"
                   onClick={() => setShowProfileDropdown(false)}
                 >
-                  <i className="ri-user-line mr-2"></i>
+                  <i className="ri-user-line mr-3 text-base"></i>
                   Profile Settings
                 </Link>
                 <button 
                   onClick={handleLogout}
-                  className="flex items-center w-full px-4 py-2 text-sm text-red-600 hover:bg-red-50"
+                  className="flex items-center w-full px-4 py-3 text-sm text-red-600 hover:bg-red-50 active:bg-red-100 transition-colors"
                 >
-                  <i className="ri-logout-box-line mr-2"></i>
+                  <i className="ri-logout-box-line mr-3 text-base"></i>
                   Logout
                 </button>
               </div>
@@ -170,7 +170,7 @@ export default function DashboardLayout({ children }: DashboardLayoutProps) {
           <DashboardSidebar isMobile={isMobile} isOpen={openSidebar} />
           
           {/* Main Content */}
-          <main className="flex-1 overflow-auto dashboard-content">
+          <main className="flex-1 overflow-auto px-3 sm:px-4 lg:px-6 py-4 sm:py-6 pb-20 lg:pb-6">
             {children}
           </main>
         </div>

@@ -7,7 +7,7 @@ import { useAuth } from '@/contexts/AuthContext';
 
 export default function VerifyEmailPage() {
   const router = useRouter();
-  const { user, resendVerificationEmail, checkEmailVerification } = useAuth();
+  const { user, resendVerificationEmail, checkEmailVerification, refreshUser } = useAuth();
   const [isResending, setIsResending] = useState(false);
   const [resendMessage, setResendMessage] = useState('');
   const [isChecking, setIsChecking] = useState(false);
@@ -28,8 +28,12 @@ export default function VerifyEmailPage() {
 
     // Set up interval to periodically check verification status
     const checkInterval = setInterval(async () => {
-      if (user) {
+      if (user && autoChecking) {
         try {
+          // First refresh the user to get latest status from Firebase
+          await refreshUser();
+          
+          // Then check verification
           const isVerified = await checkEmailVerification();
           if (isVerified) {
             clearInterval(checkInterval);
@@ -40,13 +44,13 @@ export default function VerifyEmailPage() {
           console.error('Error checking verification status:', error);
         }
       }
-    }, 3000); // Check every 3 seconds
+    }, 2000); // Check every 2 seconds for better responsiveness
 
-    // Stop auto checking after 5 minutes
+    // Stop auto checking after 3 minutes (reduced from 5)
     const stopAutoCheckTimeout = setTimeout(() => {
       setAutoChecking(false);
       clearInterval(checkInterval);
-    }, 300000); // 5 minutes
+    }, 180000); // 3 minutes
 
     // Cleanup interval on unmount
     return () => {
@@ -57,7 +61,7 @@ export default function VerifyEmailPage() {
         clearTimeout(stopAutoCheckTimeout);
       }
     };
-  }, [user, router, checkEmailVerification]);
+  }, [user, router, checkEmailVerification, refreshUser, autoChecking]);
 
   const handleResendEmail = async () => {
     try {
@@ -82,6 +86,9 @@ export default function VerifyEmailPage() {
   const handleCheckVerification = async () => {
     try {
       setIsChecking(true);
+      // First refresh user state
+      await refreshUser();
+      // Then check verification
       const isVerified = await checkEmailVerification();
       if (isVerified) {
         router.push('/dashboard');

@@ -16,10 +16,16 @@ const MobileNavItem = ({ path, icon, label }: MobileNavItemProps) => {
   return (
     <Link 
       href={path} 
-      className={isActive ? 'mobile-nav-item-active' : 'mobile-nav-item'}
+      className={`flex flex-col items-center justify-center py-2 px-3 min-w-0 flex-1 transition-colors duration-200 ${
+        isActive 
+          ? 'text-red-800' 
+          : 'text-slate-600 hover:text-red-800'
+      }`}
     >
-      <i className={`ri-${icon} ${isActive ? 'text-red-400' : 'text-gray-400'}`}></i>
-      <span className="text-xs mt-1">{label}</span>
+      <i className={`ri-${icon} text-xl mb-1 ${isActive ? 'text-red-800' : 'text-slate-600'}`}></i>
+      <span className={`text-xs font-medium truncate ${isActive ? 'text-red-800' : 'text-slate-600'}`}>
+        {label}
+      </span>
     </Link>
   );
 };
@@ -32,7 +38,7 @@ export default function MobileNavigation() {
   ];
   
   return (
-    <div className="fixed bottom-0 left-0 right-0 bg-black border-t border-gray-800 flex justify-around items-center h-16">
+    <div className="fixed bottom-0 left-0 right-0 bg-white border-t border-slate-200 flex justify-around items-center h-16 shadow-lg z-50">
       {navItems.map((item) => (
         <MobileNavItem key={item.path} {...item} />
       ))}

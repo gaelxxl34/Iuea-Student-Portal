@@ -28,9 +28,7 @@ export default function SignUpPage() {
 
   const validatePassword = (password: string) => {
     return {
-      length: password.length >= 8,
-      uppercase: /[A-Z]/.test(password),
-      number: /\d/.test(password)
+      length: password.length >= 6
     };
   };
 
@@ -62,7 +60,7 @@ export default function SignUpPage() {
     if (!formData.whatsappNumber.trim()) newErrors.whatsappNumber = 'WhatsApp number is required';
     else if (!whatsappVerified) newErrors.whatsappNumber = 'Please verify your WhatsApp number';
     if (!formData.password) newErrors.password = 'Password is required';
-    else if (passwordStrength < 3) newErrors.password = 'Password must meet all requirements';
+    else if (passwordStrength < 1) newErrors.password = 'Password must be at least 6 characters long';
 
     setErrors(newErrors);
     return Object.keys(newErrors).length === 0;
@@ -190,7 +188,7 @@ export default function SignUpPage() {
       <div 
         className="hidden lg:block lg:w-3/5 bg-cover bg-center bg-no-repeat"
         style={{
-          backgroundImage: `linear-gradient(135deg, rgba(120, 0, 0, 0.15) 0%, rgba(120, 0, 0, 0.1) 50%, rgba(120, 0, 0, 0.05) 100%), url('https://iuea.ac.ug/blog/wp-content/uploads/2024/11/WhatsApp-Image-2024-11-29-at-12.00.38_29c7f282.jpg')`,
+          backgroundImage: `linear-gradient(135deg, rgba(120, 0, 0, 0.15) 0%, rgba(120, 0, 0, 0.1) 50%, rgba(120, 0, 0, 0.05) 100%), url('/side image.jpg')`,
           backgroundSize: 'cover',
           backgroundPosition: 'center',
           backgroundRepeat: 'no-repeat'
@@ -417,27 +415,16 @@ export default function SignUpPage() {
               {formData.password && (
                 <div className="mt-2 space-y-1">
                   <div className="flex gap-1">
-                    {[1, 2, 3].map((level) => (
-                      <div
-                        key={level}
-                        className={`h-1 flex-1 rounded-full ${
-                          passwordStrength >= level ? 'bg-green-500' : 'bg-[#EDEDED]'
-                        }`}
-                      />
-                    ))}
+                    <div
+                      className={`h-1 flex-1 rounded-full ${
+                        passwordStrength >= 1 ? 'bg-green-500' : 'bg-[#EDEDED]'
+                      }`}
+                    />
                   </div>
                   <div className="space-y-0.5 text-xs">
                     <div className={`flex items-center gap-1 ${passwordRules.length ? 'text-green-600' : 'text-[#333333]/60'}`}>
                       <i className={`ri-${passwordRules.length ? 'check' : 'close'}-line text-xs`}></i>
-                      <span>At least 8 characters</span>
-                    </div>
-                    <div className={`flex items-center gap-1 ${passwordRules.uppercase ? 'text-green-600' : 'text-[#333333]/60'}`}>
-                      <i className={`ri-${passwordRules.uppercase ? 'check' : 'close'}-line text-xs`}></i>
-                      <span>One uppercase letter</span>
-                    </div>
-                    <div className={`flex items-center gap-1 ${passwordRules.number ? 'text-green-600' : 'text-[#333333]/60'}`}>
-                      <i className={`ri-${passwordRules.number ? 'check' : 'close'}-line text-xs`}></i>
-                      <span>One number</span>
+                      <span>At least 6 characters</span>
                     </div>
                   </div>
                 </div>

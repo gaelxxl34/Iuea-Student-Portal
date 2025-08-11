@@ -7,7 +7,6 @@ import {
   getUserData, 
   UserData, 
   signUpWithEmail, 
-  signInWithEmail, 
   signInUnverified,
   resendEmailVerification,
   checkEmailVerification,
@@ -20,11 +19,11 @@ interface AuthContextType {
   loading: boolean;
   signOut: () => Promise<void>;
   signUp: (email: string, password: string, firstName: string, lastName: string, whatsappNumber: string) => Promise<User>;
-  signIn: (email: string, password: string) => Promise<User>;
   signInUnverified: (email: string, password: string) => Promise<User>;
   resendVerificationEmail: () => Promise<void>;
   checkEmailVerification: () => Promise<boolean>;
   resetPassword: (email: string) => Promise<void>;
+  refreshUser: () => Promise<void>;
 }
 
 const AuthContext = createContext<AuthContextType>({
@@ -33,11 +32,11 @@ const AuthContext = createContext<AuthContextType>({
   loading: true,
   signOut: async () => {},
   signUp: async () => { throw new Error('AuthContext not initialized'); },
-  signIn: async () => { throw new Error('AuthContext not initialized'); },
   signInUnverified: async () => { throw new Error('AuthContext not initialized'); },
   resendVerificationEmail: async () => { throw new Error('AuthContext not initialized'); },
   checkEmailVerification: async () => { throw new Error('AuthContext not initialized'); },
-  resetPassword: async () => { throw new Error('AuthContext not initialized'); }
+  resetPassword: async () => { throw new Error('AuthContext not initialized'); },
+  refreshUser: async () => { throw new Error('AuthContext not initialized'); }
 });
 
 export const useAuth = () => {
@@ -62,23 +61,9 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
       if (user) {
         setUser(user);
         try {
-          // If user is verified in Firebase Auth but not in Firestore, update Firestore
-          if (user.emailVerified) {
-            const data = await getUserData(user.uid);
-            if (data && !data.emailVerified) {
-              // Update Firestore with verified status
-              const { updateUserData } = await import('@/lib/auth');
-              await updateUserData(user.uid, { emailVerified: true });
-              // Refetch user data with updated verification status
-              const updatedData = await getUserData(user.uid);
-              setUserData(updatedData);
-            } else {
-              setUserData(data);
-            }
-          } else {
-            const data = await getUserData(user.uid);
-            setUserData(data);
-          }
+          // Get user data from Firestore
+          const data = await getUserData(user.uid);
+          setUserData(data);
         } catch (error) {
           console.error('Error fetching user data:', error);
         }
@@ -111,10 +96,6 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
     return await signUpWithEmail(email, password, firstName, lastName, whatsappNumber);
   };
 
-  const handleSignIn = async (email: string, password: string) => {
-    return await signInWithEmail(email, password);
-  };
-
   const handleSignInUnverified = async (email: string, password: string) => {
     return await signInUnverified(email, password);
   };
@@ -124,7 +105,21 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
   };
 
   const handleCheckEmailVerification = async () => {
-    return await checkEmailVerification();
+    const result = await checkEmailVerification();
+    // If verified, refresh the user state to get updated emailVerified status
+    if (result && auth.currentUser) {
+      await auth.currentUser.reload();
+      // Force a re-render by updating the user state
+      setUser({ ...auth.currentUser });
+    }
+    return result;
+  };
+
+  const handleRefreshUser = async () => {
+    if (auth.currentUser) {
+      await auth.currentUser.reload();
+      setUser({ ...auth.currentUser });
+    }
   };
 
   const handleResetPassword = async (email: string) => {
@@ -137,11 +132,11 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
     loading,
     signOut: handleSignOut,
     signUp: handleSignUp,
-    signIn: handleSignIn,
     signInUnverified: handleSignInUnverified,
     resendVerificationEmail: handleResendVerificationEmail,
     checkEmailVerification: handleCheckEmailVerification,
-    resetPassword: handleResetPassword
+    resetPassword: handleResetPassword,
+    refreshUser: handleRefreshUser
   };
 
   return (

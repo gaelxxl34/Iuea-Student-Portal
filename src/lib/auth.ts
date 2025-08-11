@@ -20,11 +20,10 @@ export interface UserData {
   whatsappNumber: string;
   createdAt: Date;
   lastLogin?: Date;
-  emailVerified: boolean;
   applicationStatus?: 'draft' | 'in_progress' | 'submitted' | 'approved' | 'rejected';
 }
 
-// Sign up with email and password
+// Sign up with email and password via backend
 export const signUpWithEmail = async (
   email: string, 
   password: string, 
@@ -33,60 +32,41 @@ export const signUpWithEmail = async (
   whatsappNumber: string
 ): Promise<User> => {
   try {
-    // Create user account
-    const userCredential = await createUserWithEmailAndPassword(auth, email, password);
-    const user = userCredential.user;
-
-    // Send email verification
-    await sendEmailVerification(user);
-
-    // Update user profile
-    await updateProfile(user, {
-      displayName: `${firstName} ${lastName}`
-    });
-
-    // Create user document in Firestore
-    const userData: UserData = {
-      uid: user.uid,
-      email: user.email!,
-      firstName,
-      lastName,
-      whatsappNumber,
-      createdAt: new Date(),
-      emailVerified: false,
-      applicationStatus: 'draft'
-    };
-
-    await setDoc(doc(db, 'users', user.uid), userData);
-
-    return user;
-  } catch (error) {
-    console.error('Error creating user:', error);
-    throw error;
-  }
-};
-
-// Sign in with email and password
-export const signInWithEmail = async (email: string, password: string): Promise<User> => {
-  try {
-    const userCredential = await signInWithEmailAndPassword(auth, email, password);
-    const user = userCredential.user;
+    console.log('🚀 Registering user via backend API:', email);
     
-    // Check if email is verified
-    if (!user.emailVerified) {
-      throw new Error('EMAIL_NOT_VERIFIED');
+    // Call backend registration endpoint
+    const response = await fetch(`${process.env.NEXT_PUBLIC_BACKEND_URL || process.env.NEXT_PUBLIC_API_URL || 'http://localhost:5000'}/auth/register`, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify({
+        email,
+        password,
+        firstName,
+        lastName,
+        whatsappNumber,
+      }),
+    });
+    
+    const data = await response.json();
+    
+    if (!response.ok) {
+      throw new Error(data.error || `HTTP error! status: ${response.status}`);
     }
     
-    // Update last login and email verification status
-    const userDoc = doc(db, 'users', user.uid);
-    await setDoc(userDoc, { 
-      lastLogin: new Date(),
-      emailVerified: user.emailVerified 
-    }, { merge: true });
+    if (!data.success) {
+      throw new Error(data.error || 'Registration failed');
+    }
     
-    return user;
+    console.log('✅ User registered successfully via backend');
+    
+    // Now sign in the user to get the Firebase User object
+    const userCredential = await signInWithEmailAndPassword(auth, email, password);
+    return userCredential.user;
+    
   } catch (error) {
-    console.error('Error signing in:', error);
+    console.error('Error creating user via backend:', error);
     throw error;
   }
 };
@@ -101,27 +81,91 @@ export const signOutUser = async (): Promise<void> => {
   }
 };
 
-// Get user data from Firestore
+// Get user data from backend API instead of direct Firestore
 export const getUserData = async (uid: string): Promise<UserData | null> => {
   try {
-    const userDoc = await getDoc(doc(db, 'users', uid));
+    console.log('🔍 Fetching user data from Firestore users collection for UID:', uid);
+    
+    // Fetch directly from Firestore users collection
+    const userDocRef = doc(db, 'users', uid);
+    const userDoc = await getDoc(userDocRef);
+    
     if (userDoc.exists()) {
-      return userDoc.data() as UserData;
+      const userData = userDoc.data();
+      console.log('✅ User data found in Firestore:', userData);
+      
+      const formattedUserData: UserData = {
+        uid: userData.uid || uid,
+        email: userData.email || '',
+        firstName: userData.firstName || '',
+        lastName: userData.lastName || '',
+        whatsappNumber: userData.whatsappNumber || '',
+        createdAt: userData.createdAt?.toDate() || new Date(),
+        lastLogin: userData.lastLogin?.toDate(),
+        applicationStatus: userData.applicationStatus,
+      };
+      
+      console.log('✅ Formatted user data:', formattedUserData);
+      return formattedUserData;
+    } else {
+      console.log('❌ No user document found in Firestore for UID:', uid);
+      return null;
     }
-    return null;
   } catch (error) {
-    console.error('Error getting user data:', error);
+    console.error('❌ Error getting user data from Firestore:', error);
+    // Fallback: try to get basic user data from Firebase Auth
+    try {
+      const user = auth.currentUser;
+      if (user) {
+        const userData: UserData = {
+          uid: user.uid,
+          email: user.email || '',
+          firstName: user.displayName?.split(' ')[0] || '',
+          lastName: user.displayName?.split(' ').slice(1).join(' ') || '',
+          whatsappNumber: '',
+          createdAt: new Date(),
+        };
+        console.log('⚠️ Using fallback user data from Firebase Auth:', userData);
+        return userData;
+      }
+    } catch (fallbackError) {
+      console.error('Fallback user data fetch also failed:', fallbackError);
+    }
     throw error;
   }
 };
 
-// Update user data
+// Update user data via backend API instead of direct Firestore
 export const updateUserData = async (uid: string, data: Partial<UserData>): Promise<void> => {
   try {
-    const userDoc = doc(db, 'users', uid);
-    await setDoc(userDoc, data, { merge: true });
+    // Get the Firebase ID token for authentication
+    const user = auth.currentUser;
+    if (!user) {
+      throw new Error('No authenticated user');
+    }
+    
+    const idToken = await user.getIdToken();
+    
+    // Call your backend API to update user data
+    const response = await fetch(`${process.env.NEXT_PUBLIC_BACKEND_URL || process.env.NEXT_PUBLIC_API_URL || 'http://localhost:5000'}/users/update`, {
+      method: 'PUT',
+      headers: {
+        'Content-Type': 'application/json',
+        'Authorization': `Bearer ${idToken}`,
+      },
+      body: JSON.stringify({
+        uid,
+        ...data,
+      }),
+    });
+    
+    if (!response.ok) {
+      throw new Error(`HTTP error! status: ${response.status}`);
+    }
+    
+    console.log('✅ User data updated via backend');
   } catch (error) {
-    console.error('Error updating user data:', error);
+    console.error('Error updating user data via backend:', error);
     throw error;
   }
 };
@@ -156,11 +200,10 @@ export const checkEmailVerification = async (): Promise<boolean> => {
     // Reload user to get latest verification status from Firebase Auth
     await reload(user);
     
-    // Update Firestore if verification status changed
+    // Update last login if verified
     if (user.emailVerified) {
       const userDoc = doc(db, 'users', user.uid);
       await setDoc(userDoc, { 
-        emailVerified: true,
         lastLogin: new Date() 
       }, { merge: true });
     }
