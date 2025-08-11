@@ -1,7 +1,6 @@
 import { storage, auth } from './firebase';
 import { 
   ref, 
-  uploadBytes, 
   getDownloadURL, 
   deleteObject,
   listAll,

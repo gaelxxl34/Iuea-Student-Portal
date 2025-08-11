@@ -1,7 +1,8 @@
 'use client';
 
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useCallback } from 'react';
 import Link from 'next/link';
+import Image from 'next/image';
 import { useAuth } from '@/contexts/AuthContext';
 import { studentApplicationService, Application } from '@/lib/applicationService';
 import { useApplicationDocuments } from '@/hooks/useDocumentAccess';
@@ -34,20 +35,19 @@ export default function DocumentsPage() {
   );
 
   // Document categories - matching our 3 document types
-  const documentCategories = [
+  const documentCategories: Array<{
+    id: 'passportPhoto' | 'academicDocuments' | 'identificationDocument';
+    name: string;
+    key: string;
+  }> = [
     { id: 'passportPhoto', name: 'Passport Photo', key: 'passportPhoto' },
     { id: 'academicDocuments', name: 'Academic Documents', key: 'academicDocuments' },
     { id: 'identificationDocument', name: 'Identification Documents', key: 'identificationDocument' },
   ];
   
-  const [activeCategory, setActiveCategory] = useState('passportPhoto');
+  const [activeCategory, setActiveCategory] = useState<'passportPhoto' | 'academicDocuments' | 'identificationDocument'>('passportPhoto');
 
-  // Fetch applications when component mounts
-  useEffect(() => {
-    fetchApplications();
-  }, [user]);
-
-  const fetchApplications = async () => {
+  const fetchApplications = useCallback(async () => {
     if (!user?.email) {
       setIsLoading(false);
       return;
@@ -59,17 +59,23 @@ export default function DocumentsPage() {
       const userApplications = await studentApplicationService.getApplicationsByEmail(user.email);
       setApplications(userApplications);
       
-      // Select the first application by default
-      if (userApplications.length > 0) {
+      // Auto-select first application if none selected
+      if (userApplications.length > 0 && !selectedApplication) {
         setSelectedApplication(userApplications[0]);
       }
+      
     } catch (err) {
-      console.error('Error fetching applications:', err);
+      console.error('Failed to fetch applications:', err);
       setError('Failed to load applications. Please try again.');
     } finally {
       setIsLoading(false);
     }
-  };
+  }, [user?.email, selectedApplication]);
+
+  // Fetch applications when component mounts
+  useEffect(() => {
+    fetchApplications();
+  }, [fetchApplications]);
 
   // Handle file selection and upload
   const handleFileUpload = async (documentType: 'passportPhoto' | 'academicDocuments' | 'identificationDocument') => {
@@ -149,7 +155,7 @@ export default function DocumentsPage() {
         <div className="text-center py-12">
           <i className="ri-file-list-line text-4xl text-slate-400 mb-4"></i>
           <h3 className="text-lg font-medium text-slate-800 mb-2">No Applications Found</h3>
-          <p className="text-slate-600 mb-4">You haven't submitted any applications yet.</p>
+          <p className="text-slate-600 mb-4">You haven&apos;t submitted any applications yet.</p>
           <Link 
             href="/dashboard/application"
             className="inline-flex items-center px-4 py-2 bg-red-800 text-white rounded-lg hover:bg-red-900 transition-colors"
@@ -336,7 +342,7 @@ export default function DocumentsPage() {
                         View Document
                       </a>
                       <button 
-                        onClick={() => handleFileUpload(activeCategory as any)}
+                        onClick={() => handleFileUpload(activeCategory)}
                         disabled={uploading}
                         className="flex items-center justify-center px-4 py-3 border border-red-800 text-red-800 hover:bg-red-800 hover:text-white rounded-lg transition-colors text-sm font-medium disabled:opacity-50 disabled:cursor-not-allowed min-h-[44px]"
                       >
@@ -346,7 +352,7 @@ export default function DocumentsPage() {
                     </>
                   ) : (
                     <button 
-                      onClick={() => handleFileUpload(activeCategory as any)}
+                      onClick={() => handleFileUpload(activeCategory)}
                       disabled={uploading}
                       className="flex items-center justify-center px-4 py-3 bg-red-800 text-white rounded-lg hover:bg-red-900 transition-colors text-sm font-medium disabled:opacity-50 disabled:cursor-not-allowed min-h-[44px] w-full sm:w-auto"
                     >
@@ -436,9 +442,11 @@ export default function DocumentsPage() {
                   {/* Image preview for photos */}
                   {activeCategory === 'passportPhoto' && documentInfo.uploadedUrl ? (
                     <div className="max-w-xs mx-auto">
-                      <img 
+                      <Image 
                         src={documentInfo.uploadedUrl}
                         alt="Passport Photo"
+                        width={300}
+                        height={400}
                         className="w-full rounded-lg shadow-sm"
                         onError={(e) => {
                           (e.target as HTMLImageElement).style.display = 'none';

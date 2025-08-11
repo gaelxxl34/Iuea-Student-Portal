@@ -1,6 +1,6 @@
 'use client';
 
-import { useEffect, useState } from 'react';
+import { useEffect, useState, useCallback } from 'react';
 
 export interface ToastMessage {
   id: string;
@@ -25,6 +25,13 @@ const Toast: React.FC<ToastProps> = ({ toast, onClose }) => {
     return () => clearTimeout(timer);
   }, []);
 
+  const handleClose = useCallback(() => {
+    setIsLeaving(true);
+    setTimeout(() => {
+      onClose(toast.id);
+    }, 300); // Match the animation duration
+  }, [onClose, toast.id]);
+
   useEffect(() => {
     if (toast.duration && toast.duration > 0) {
       const timer = setTimeout(() => {
@@ -32,14 +39,7 @@ const Toast: React.FC<ToastProps> = ({ toast, onClose }) => {
       }, toast.duration);
       return () => clearTimeout(timer);
     }
-  }, [toast.duration]);
-
-  const handleClose = () => {
-    setIsLeaving(true);
-    setTimeout(() => {
-      onClose(toast.id);
-    }, 300); // Match the animation duration
-  };
+  }, [toast.duration, handleClose]);
 
   const getToastStyles = () => {
     const baseStyles = "border-l-4 shadow-lg rounded-lg p-4 mb-3 transition-all duration-300 transform backdrop-blur-sm";

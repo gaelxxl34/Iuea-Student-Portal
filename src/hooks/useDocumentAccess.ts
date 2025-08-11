@@ -130,7 +130,11 @@ export const useApplicationDocuments = (application: {
       setLoading(true);
       setError(null);
 
-      const urls: any = {};
+      const urls: {
+        passportPhotoUrl?: string;
+        academicDocumentsUrl?: string;
+        identificationDocumentUrl?: string;
+      } = {};
 
       // Fetch all document URLs
       if (application.passportPhoto) {

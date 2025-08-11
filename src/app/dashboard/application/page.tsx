@@ -42,6 +42,16 @@ interface ApplicationWithProgress extends Application {
   };
 }
 
+// Helper type for user data with optional phone fields
+interface UserDataWithOptionalPhone {
+  firstName?: string;
+  lastName?: string;
+  email?: string;
+  whatsappNumber?: string;
+  phoneNumber?: string;
+  phone?: string;
+}
+
 export default function ApplicationPage() {
   const { user, userData, refreshUser } = useAuth();
   const { toasts, removeToast, showSuccess, showError, showWarning } = useToast();
@@ -113,7 +123,7 @@ export default function ApplicationPage() {
         firstName: userData.firstName || '',
         lastName: userData.lastName || '',
         email: userData.email || '',
-        phone: userData.whatsappNumber || (userData as any).phoneNumber || (userData as any).phone || '',
+        phone: userData.whatsappNumber || (userData as unknown as Record<string, unknown>).phoneNumber as string || (userData as unknown as Record<string, unknown>).phone as string || '',
       }));
     }
   }, [userData]);
@@ -127,7 +137,7 @@ export default function ApplicationPage() {
         email: user.email || '',
       }));
     }
-  }, [user, applicationData.email]); // Added applicationData to dependencies
+  }, [user, applicationData.email]); // applicationData dependency is needed
 
   // Check for submitted application
   const checkForSubmittedApplication = useCallback(async () => {
@@ -176,7 +186,12 @@ export default function ApplicationPage() {
   // Debug effect to log user data
   useEffect(() => {
     console.log('🔍 User state changed:', { user: user?.email, userData });
-    console.log('📝 Current application data:', applicationData);
+    console.log('📝 Current application data:', { 
+      firstName: applicationData.firstName, 
+      lastName: applicationData.lastName, 
+      email: applicationData.email, 
+      phone: applicationData.phone 
+    });
   }, [user, userData, applicationData.firstName, applicationData.lastName, applicationData.email, applicationData.phone]);
 
   // Helper function to refresh user data and re-populate form
@@ -191,8 +206,8 @@ export default function ApplicationPage() {
         console.log('🔍 userData.whatsappNumber:', userData.whatsappNumber);
         console.log('🔍 All phone-related fields:', {
           whatsappNumber: userData.whatsappNumber,
-          phoneNumber: (userData as any).phoneNumber,
-          phone: (userData as any).phone,
+          phoneNumber: (userData as UserDataWithOptionalPhone).phoneNumber,
+          phone: (userData as UserDataWithOptionalPhone).phone,
         });
         
         setApplicationData(prev => ({
@@ -200,7 +215,7 @@ export default function ApplicationPage() {
           firstName: userData.firstName || '',
           lastName: userData.lastName || '',
           email: userData.email || user?.email || '',
-          phone: userData.whatsappNumber || (userData as any).phoneNumber || (userData as any).phone || '',
+          phone: userData.whatsappNumber || (userData as UserDataWithOptionalPhone).phoneNumber || (userData as UserDataWithOptionalPhone).phone || '',
         }));
         console.log('✅ User data refreshed and form updated');
       }
@@ -210,7 +225,7 @@ export default function ApplicationPage() {
   };
 
   // Utility functions for submitted application display
-  const formatDate = (dateString: any) => {
+  const formatDate = (dateString: unknown) => {
     if (!dateString) return 'Not available';
     
     try {
@@ -218,16 +233,19 @@ export default function ApplicationPage() {
       if (typeof dateString === 'object' && dateString !== null) {
         // Check for Firestore timestamp format
         if ('seconds' in dateString || '_seconds' in dateString) {
-          const seconds = dateString.seconds || dateString._seconds;
-          const date = new Date(seconds * 1000);
-          if (!isNaN(date.getTime())) {
-            return date.toLocaleDateString('en-US', {
-              year: 'numeric',
-              month: 'long',
-              day: 'numeric',
-              hour: '2-digit',
-              minute: '2-digit',
-            });
+          const timestampObj = dateString as { seconds?: number; _seconds?: number };
+          const seconds = timestampObj.seconds || timestampObj._seconds;
+          if (seconds) {
+            const date = new Date(seconds * 1000);
+            if (!isNaN(date.getTime())) {
+              return date.toLocaleDateString('en-US', {
+                year: 'numeric',
+                month: 'long',
+                day: 'numeric',
+                hour: '2-digit',
+                minute: '2-digit',
+              });
+            }
           }
         }
         // Handle Date objects
@@ -259,7 +277,7 @@ export default function ApplicationPage() {
       }
       
       // If we can't format it, return the original value or a fallback
-      return dateString?.toString() || 'Not available';
+      return String(dateString) || 'Not available';
     } catch (error) {
       console.error('Error formatting date:', error);
       return 'Not available';
@@ -998,10 +1016,10 @@ export default function ApplicationPage() {
                       program: submittedApplication.preferredProgram || '',
                       modeOfStudy: submittedApplication.modeOfStudy || '',
                       intake: submittedApplication.preferredIntake || '',
-                      sponsorTelephone: (submittedApplication as any).sponsorTelephone || '',
-                      sponsorEmail: (submittedApplication as any).sponsorEmail || '',
-                      howDidYouHear: (submittedApplication as any).howDidYouHear || '',
-                      additionalNotes: (submittedApplication as any).additionalNotes || ''
+                      sponsorTelephone: submittedApplication.sponsorTelephone || '',
+                      sponsorEmail: submittedApplication.sponsorEmail || '',
+                      howDidYouHear: submittedApplication.howDidYouHear || '',
+                      additionalNotes: submittedApplication.additionalNotes || ''
                     });
                     setApplicationMode('form');
                     setIsEditing(true);
@@ -1110,7 +1128,7 @@ export default function ApplicationPage() {
             
             <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mb-4">
               {/* Sponsor Information */}
-              {((submittedApplication as any).sponsorTelephone || (submittedApplication as any).sponsorEmail) && (
+              {(submittedApplication.sponsorTelephone || submittedApplication.sponsorEmail) && (
                 <>
                   <div className="md:col-span-2">
                     <h4 className="text-base font-medium text-slate-700 mb-3">
@@ -1119,58 +1137,58 @@ export default function ApplicationPage() {
                     </h4>
                   </div>
                   
-                  {(submittedApplication as any).sponsorTelephone && (
+                  {submittedApplication.sponsorTelephone && (
                     <div>
                       <label className="block text-sm font-medium text-slate-600 mb-1">Sponsor Telephone</label>
-                      <p className="text-slate-800">{(submittedApplication as any).sponsorTelephone}</p>
+                      <p className="text-slate-800">{submittedApplication.sponsorTelephone}</p>
                     </div>
                   )}
                   
-                  {(submittedApplication as any).sponsorEmail && (
+                  {submittedApplication.sponsorEmail && (
                     <div>
                       <label className="block text-sm font-medium text-slate-600 mb-1">Sponsor Email</label>
-                      <p className="text-slate-800">{(submittedApplication as any).sponsorEmail}</p>
+                      <p className="text-slate-800">{submittedApplication.sponsorEmail}</p>
                     </div>
                   )}
                 </>
               )}
               
               {/* How did you hear about us */}
-              {(submittedApplication as any).howDidYouHear && (
+              {submittedApplication.howDidYouHear && (
                 <div className="md:col-span-2">
                   <label className="block text-sm font-medium text-slate-600 mb-1">How did you hear about the university?</label>
                   <p className="text-slate-800 capitalize">
-                    {(submittedApplication as any).howDidYouHear === 'social-media' ? 'Social Media (Facebook, Instagram, Twitter)' :
-                     (submittedApplication as any).howDidYouHear === 'website' ? 'University Website' :
-                     (submittedApplication as any).howDidYouHear === 'friend-family' ? 'Friend or Family Recommendation' :
-                     (submittedApplication as any).howDidYouHear === 'education-fair' ? 'Education Fair' :
-                     (submittedApplication as any).howDidYouHear === 'newspaper-magazine' ? 'Newspaper/Magazine' :
-                     (submittedApplication as any).howDidYouHear === 'radio-tv' ? 'Radio/Television' :
-                     (submittedApplication as any).howDidYouHear === 'school-counselor' ? 'School Counselor' :
-                     (submittedApplication as any).howDidYouHear === 'alumni' ? 'Alumni' :
-                     (submittedApplication as any).howDidYouHear === 'search-engine' ? 'Search Engine (Google, Bing)' :
-                     (submittedApplication as any).howDidYouHear === 'university-representative' ? 'University Representative Visit' :
-                     (submittedApplication as any).howDidYouHear === 'other' ? 'Other' :
-                     (submittedApplication as any).howDidYouHear.replace('-', ' ').replace('_', ' ')
+                    {submittedApplication.howDidYouHear === 'social-media' ? 'Social Media (Facebook, Instagram, Twitter)' :
+                     submittedApplication.howDidYouHear === 'website' ? 'University Website' :
+                     submittedApplication.howDidYouHear === 'friend-family' ? 'Friend or Family Recommendation' :
+                     submittedApplication.howDidYouHear === 'education-fair' ? 'Education Fair' :
+                     submittedApplication.howDidYouHear === 'newspaper-magazine' ? 'Newspaper/Magazine' :
+                     submittedApplication.howDidYouHear === 'radio-tv' ? 'Radio/Television' :
+                     submittedApplication.howDidYouHear === 'school-counselor' ? 'School Counselor' :
+                     submittedApplication.howDidYouHear === 'alumni' ? 'Alumni' :
+                     submittedApplication.howDidYouHear === 'search-engine' ? 'Search Engine (Google, Bing)' :
+                     submittedApplication.howDidYouHear === 'university-representative' ? 'University Representative Visit' :
+                     submittedApplication.howDidYouHear === 'other' ? 'Other' :
+                     submittedApplication.howDidYouHear.replace('-', ' ').replace('_', ' ')
                     }
                   </p>
                 </div>
               )}
               
               {/* Additional Notes */}
-              {(submittedApplication as any).additionalNotes && (
+              {submittedApplication.additionalNotes && (
                 <div className="md:col-span-2">
                   <label className="block text-sm font-medium text-slate-600 mb-1">Additional Notes</label>
-                  <p className="text-slate-800">{(submittedApplication as any).additionalNotes}</p>
+                  <p className="text-slate-800">{submittedApplication.additionalNotes}</p>
                 </div>
               )}
             </div>
             
             {/* Show message if no additional information is available */}
-            {!(submittedApplication as any).sponsorTelephone && 
-             !(submittedApplication as any).sponsorEmail && 
-             !(submittedApplication as any).howDidYouHear && 
-             !(submittedApplication as any).additionalNotes && (
+            {!submittedApplication.sponsorTelephone && 
+             !submittedApplication.sponsorEmail && 
+             !submittedApplication.howDidYouHear && 
+             !submittedApplication.additionalNotes && (
               <p className="text-slate-500 italic">No additional information provided.</p>
             )}
           </div>
@@ -1246,10 +1264,10 @@ export default function ApplicationPage() {
                         program: submittedApplication.preferredProgram || '',
                         modeOfStudy: submittedApplication.modeOfStudy || '',
                         intake: submittedApplication.preferredIntake || '',
-                        sponsorTelephone: (submittedApplication as any).sponsorTelephone || '',
-                        sponsorEmail: (submittedApplication as any).sponsorEmail || '',
-                        howDidYouHear: (submittedApplication as any).howDidYouHear || '',
-                        additionalNotes: (submittedApplication as any).additionalNotes || ''
+                        sponsorTelephone: submittedApplication.sponsorTelephone || '',
+                        sponsorEmail: submittedApplication.sponsorEmail || '',
+                        howDidYouHear: submittedApplication.howDidYouHear || '',
+                        additionalNotes: submittedApplication.additionalNotes || ''
                       });
                       setApplicationMode('form');
                       setIsEditing(true);
@@ -1630,7 +1648,7 @@ export default function ApplicationPage() {
                   </label>
                   <input
                     type="tel"
-                    value={applicationData.phone || userData?.whatsappNumber || (userData as any)?.phoneNumber || (userData as any)?.phone || ''}
+                    value={applicationData.phone || userData?.whatsappNumber || (userData as UserDataWithOptionalPhone)?.phoneNumber || (userData as UserDataWithOptionalPhone)?.phone || ''}
                     onChange={(e) => handleInputChange('phone', e.target.value)}
                     readOnly={!submittedApplication}
                     className={`w-full px-4 py-3 rounded-lg border-2 text-base ${

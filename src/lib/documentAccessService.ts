@@ -256,7 +256,11 @@ export const getApplicationDocuments = async (
   academicDocumentsUrl?: string;
   identificationDocumentUrl?: string;
 }> => {
-  const urls: any = {};
+  const urls: {
+    passportPhotoUrl?: string;
+    academicDocumentsUrl?: string;
+    identificationDocumentUrl?: string;
+  } = {};
   
   if (documents.passportPhoto) {
     urls.passportPhotoUrl = await documentAccessService.getDocumentUrl(

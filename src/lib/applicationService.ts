@@ -385,7 +385,7 @@ class StudentApplicationService {
       
     } catch (error) {
       // Don't throw error if old file deletion fails - proceed with new upload
-      if ((error as any)?.code === 'storage/object-not-found') {
+      if (error && typeof error === 'object' && 'code' in error && (error as { code: string }).code === 'storage/object-not-found') {
         console.log(`ℹ️ Old ${documentType} file not found in storage (may have been deleted already)`);
       } else {
         console.warn(`⚠️ Failed to delete old ${documentType}:`, error);
@@ -604,7 +604,7 @@ class StudentApplicationService {
           sponsorEmail: data.sponsorEmail || '',
           howDidYouHear: data.howDidYouHear || '',
           additionalNotes: data.additionalNotes || '',
-        } as any);
+        });
       });
       
       console.log(`✅ Found ${applications.length} applications for user`);
