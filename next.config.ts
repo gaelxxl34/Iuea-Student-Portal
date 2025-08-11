@@ -20,7 +20,9 @@ const nextConfig: NextConfig = {
     formats: ['image/webp', 'image/avif'],
   },
 
-  // Security headers
+  // Security headers - commented out for server deployment
+  // Note: These headers should be configured in nginx instead
+  /*
   async headers() {
     return [
       {
@@ -42,11 +44,12 @@ const nextConfig: NextConfig = {
       },
     ];
   },
+  */
 
-  // Static export for deployment
-  output: process.env.NODE_ENV === 'production' ? 'export' : undefined,
-  trailingSlash: true,
-  distDir: 'out',
+  // Remove static export for server deployment
+  // output: process.env.NODE_ENV === 'production' ? 'export' : undefined,
+  // trailingSlash: true,
+  // distDir: 'out',
 };
 
 export default nextConfig;
