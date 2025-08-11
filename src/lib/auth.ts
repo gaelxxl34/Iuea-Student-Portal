@@ -1,5 +1,6 @@
 import { 
   signInWithEmailAndPassword,
+  createUserWithEmailAndPassword,
   signOut,
   User,
   sendEmailVerification,
@@ -21,7 +22,7 @@ export interface UserData {
   applicationStatus?: 'draft' | 'in_progress' | 'submitted' | 'approved' | 'rejected';
 }
 
-// Sign up with email and password via backend
+// Sign up with email and password using Firebase Auth directly
 export const signUpWithEmail = async (
   email: string, 
   password: string, 
@@ -30,41 +31,39 @@ export const signUpWithEmail = async (
   whatsappNumber: string
 ): Promise<User> => {
   try {
-    console.log('🚀 Registering user via backend API:', email);
+    console.log('🚀 Creating user with Firebase Auth:', email);
     
-    // Call backend registration endpoint
-    const response = await fetch(`${process.env.NEXT_PUBLIC_BACKEND_URL || process.env.NEXT_PUBLIC_API_URL || 'http://localhost:5000'}/auth/register`, {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-      },
-      body: JSON.stringify({
-        email,
-        password,
-        firstName,
-        lastName,
-        whatsappNumber,
-      }),
-    });
+    // Create user with Firebase Auth
+    const userCredential = await createUserWithEmailAndPassword(auth, email, password);
+    const user = userCredential.user;
     
-    const data = await response.json();
+    console.log('✅ User created with Firebase Auth, UID:', user.uid);
     
-    if (!response.ok) {
-      throw new Error(data.error || `HTTP error! status: ${response.status}`);
-    }
+    // Store additional user data in Firestore
+    const userData: UserData = {
+      uid: user.uid,
+      email: user.email || email,
+      firstName,
+      lastName,
+      whatsappNumber,
+      createdAt: new Date(),
+      applicationStatus: 'draft'
+    };
     
-    if (!data.success) {
-      throw new Error(data.error || 'Registration failed');
-    }
+    // Save to Firestore users collection
+    const userDocRef = doc(db, 'users', user.uid);
+    await setDoc(userDocRef, userData);
     
-    console.log('✅ User registered successfully via backend');
+    console.log('✅ User data saved to Firestore');
     
-    // Now sign in the user to get the Firebase User object
-    const userCredential = await signInWithEmailAndPassword(auth, email, password);
-    return userCredential.user;
+    // Send email verification
+    await sendEmailVerification(user);
+    console.log('✅ Email verification sent');
+    
+    return user;
     
   } catch (error) {
-    console.error('Error creating user via backend:', error);
+    console.error('Error creating user:', error);
     throw error;
   }
 };
@@ -79,12 +78,11 @@ export const signOutUser = async (): Promise<void> => {
   }
 };
 
-// Get user data from backend API instead of direct Firestore
+// Get user data from Firestore
 export const getUserData = async (uid: string): Promise<UserData | null> => {
   try {
-    console.log('🔍 Fetching user data from Firestore users collection for UID:', uid);
+    console.log('🔍 Fetching user data from Firestore for UID:', uid);
     
-    // Fetch directly from Firestore users collection
     const userDocRef = doc(db, 'users', uid);
     const userDoc = await getDoc(userDocRef);
     
@@ -100,10 +98,9 @@ export const getUserData = async (uid: string): Promise<UserData | null> => {
         whatsappNumber: userData.whatsappNumber || '',
         createdAt: userData.createdAt?.toDate() || new Date(),
         lastLogin: userData.lastLogin?.toDate(),
-        applicationStatus: userData.applicationStatus,
+        applicationStatus: userData.applicationStatus || 'draft',
       };
       
-      console.log('✅ Formatted user data:', formattedUserData);
       return formattedUserData;
     } else {
       console.log('❌ No user document found in Firestore for UID:', uid);
@@ -111,59 +108,24 @@ export const getUserData = async (uid: string): Promise<UserData | null> => {
     }
   } catch (error) {
     console.error('❌ Error getting user data from Firestore:', error);
-    // Fallback: try to get basic user data from Firebase Auth
-    try {
-      const user = auth.currentUser;
-      if (user) {
-        const userData: UserData = {
-          uid: user.uid,
-          email: user.email || '',
-          firstName: user.displayName?.split(' ')[0] || '',
-          lastName: user.displayName?.split(' ').slice(1).join(' ') || '',
-          whatsappNumber: '',
-          createdAt: new Date(),
-        };
-        console.log('⚠️ Using fallback user data from Firebase Auth:', userData);
-        return userData;
-      }
-    } catch (fallbackError) {
-      console.error('Fallback user data fetch also failed:', fallbackError);
-    }
     throw error;
   }
 };
 
-// Update user data via backend API instead of direct Firestore
+// Update user data in Firestore
 export const updateUserData = async (uid: string, data: Partial<UserData>): Promise<void> => {
   try {
-    // Get the Firebase ID token for authentication
-    const user = auth.currentUser;
-    if (!user) {
-      throw new Error('No authenticated user');
-    }
+    console.log('📝 Updating user data in Firestore for UID:', uid);
     
-    const idToken = await user.getIdToken();
+    const userDocRef = doc(db, 'users', uid);
+    await setDoc(userDocRef, {
+      ...data,
+      updatedAt: new Date()
+    }, { merge: true });
     
-    // Call your backend API to update user data
-    const response = await fetch(`${process.env.NEXT_PUBLIC_BACKEND_URL || process.env.NEXT_PUBLIC_API_URL || 'http://localhost:5000'}/users/update`, {
-      method: 'PUT',
-      headers: {
-        'Content-Type': 'application/json',
-        'Authorization': `Bearer ${idToken}`,
-      },
-      body: JSON.stringify({
-        uid,
-        ...data,
-      }),
-    });
-    
-    if (!response.ok) {
-      throw new Error(`HTTP error! status: ${response.status}`);
-    }
-    
-    console.log('✅ User data updated via backend');
+    console.log('✅ User data updated in Firestore');
   } catch (error) {
-    console.error('Error updating user data via backend:', error);
+    console.error('❌ Error updating user data in Firestore:', error);
     throw error;
   }
 };
