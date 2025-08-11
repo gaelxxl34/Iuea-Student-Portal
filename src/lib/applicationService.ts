@@ -76,7 +76,6 @@ export interface Application {
   preferredIntake: string;
   preferredProgram: string;
   postalAddress?: string;
-  stage: string;
   status: string;
   submittedAt: string;
   updatedAt: string;
@@ -92,15 +91,14 @@ export interface Application {
 
 // Lead constants (matching backend)
 export const LEAD_STATUSES = {
-  INQUIRY: "INQUIRY",
-  CONTACTED: "CONTACTED", 
-  PRE_QUALIFIED: "PRE_QUALIFIED",
+  INTERESTED: "INTERESTED",
   APPLIED: "APPLIED",
+  IN_REVIEW: "IN_REVIEW",
   QUALIFIED: "QUALIFIED",
   ADMITTED: "ADMITTED",
   ENROLLED: "ENROLLED",
-  NURTURE: "NURTURE",
-  REJECTED: "REJECTED",
+  DEFERRED: "DEFERRED",
+  EXPIRED: "EXPIRED",
 } as const;
 
 export const LEAD_SOURCES = {
@@ -124,19 +122,13 @@ export const LEAD_SOURCES = {
 
 // Application status constants (matching backend)
 export const APPLICATION_STATUSES = {
-  DRAFT: "DRAFT",
-  SUBMITTED: "SUBMITTED",
-  UNDER_REVIEW: "UNDER_REVIEW",
-  DOCUMENTS_REQUIRED: "DOCUMENTS_REQUIRED",
-  DOCUMENTS_RECEIVED: "DOCUMENTS_RECEIVED",
-  INTERVIEW_COMPLETED: "INTERVIEW_COMPLETED",
-  CONDITIONALLY_ACCEPTED: "CONDITIONALLY_ACCEPTED",
-  ACCEPTED: "ACCEPTED",
-  REJECTED: "REJECTED",
-  WAITLISTED: "WAITLISTED",
+  INTERESTED: "INTERESTED",
+  APPLIED: "APPLIED",
+  IN_REVIEW: "IN_REVIEW",
+  QUALIFIED: "QUALIFIED",
+  ADMITTED: "ADMITTED",
   ENROLLED: "ENROLLED",
   DEFERRED: "DEFERRED",
-  WITHDRAWN: "WITHDRAWN",
   EXPIRED: "EXPIRED",
 } as const;
 
@@ -201,7 +193,7 @@ class StudentApplicationService {
         additionalNotes: data.additionalNotes || null,
 
         // Application Meta
-        status: APPLICATION_STATUSES.SUBMITTED,
+        status: APPLICATION_STATUSES.APPLIED,
         submittedAt: currentTime.toISOString(),
         createdAt: currentTime.toISOString(),
         updatedAt: currentTime.toISOString(),
@@ -592,8 +584,7 @@ class StudentApplicationService {
           preferredIntake: data.preferredIntake || '',
           preferredProgram: data.preferredProgram || '',
           postalAddress: data.postalAddress || '',
-          stage: data.stage || 'submitted',
-          status: data.status || APPLICATION_STATUSES.SUBMITTED,
+          status: data.status || APPLICATION_STATUSES.APPLIED,
           submittedAt: data.submittedAt || '',
           updatedAt: data.updatedAt || '',
           passportPhoto: data.passportPhoto || '',
@@ -636,33 +627,70 @@ class StudentApplicationService {
     let statusBgColor = 'bg-gray-100';
     let nextAction = 'Start Your Application';
 
-    // Determine progress based on application stage and data completeness
-    switch (application.stage?.toLowerCase()) {
-      case 'new':
-      case 'submitted':
-        completedSteps = 1;
-        status = 'Application Submitted';
+    // Determine progress based on application status and data completeness
+    switch (application.status?.toLowerCase()) {
+      case 'interested':
+        completedSteps = 0;
+        status = 'Interest Expressed';
         statusColor = 'text-blue-800';
         statusBgColor = 'bg-blue-100';
+        nextAction = 'Complete Your Application';
+        break;
+        
+      case 'applied':
+        completedSteps = 1;
+        status = 'Application Submitted';
+        statusColor = 'text-purple-800';
+        statusBgColor = 'bg-purple-100';
         nextAction = 'Upload Required Documents';
         break;
       
-      case 'document_review':
-      case 'documents_pending':
+      case 'in_review':
         completedSteps = 2;
         status = 'Under Review';
         statusColor = 'text-yellow-800';
         statusBgColor = 'bg-yellow-100';
-        nextAction = 'Wait for Document Review';
+        nextAction = 'Wait for Review Completion';
+        break;
+      
+      case 'qualified':
+        completedSteps = 3;
+        status = 'Qualified';
+        statusColor = 'text-orange-800';
+        statusBgColor = 'bg-orange-100';
+        nextAction = 'Wait for Admission Decision';
         break;
       
       case 'admitted':
-      case 'accepted':
-        completedSteps = 3;
+        completedSteps = 4;
         status = 'Admitted';
         statusColor = 'text-green-800';
         statusBgColor = 'bg-green-100';
         nextAction = 'Complete Enrollment';
+        break;
+      
+      case 'enrolled':
+        completedSteps = 5;
+        status = 'Enrolled';
+        statusColor = 'text-emerald-800';
+        statusBgColor = 'bg-emerald-100';
+        nextAction = 'Access Student Portal';
+        break;
+        
+      case 'deferred':
+        completedSteps = 3;
+        status = 'Deferred';
+        statusColor = 'text-amber-800';
+        statusBgColor = 'bg-amber-100';
+        nextAction = 'Wait for Next Intake';
+        break;
+        
+      case 'expired':
+        completedSteps = 1;
+        status = 'Application Expired';
+        statusColor = 'text-red-800';
+        statusBgColor = 'bg-red-100';
+        nextAction = 'Submit New Application';
         break;
       
       case 'enrolled':

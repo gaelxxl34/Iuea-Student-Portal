@@ -7,7 +7,7 @@ import {
   reload,
   sendPasswordResetEmail
 } from 'firebase/auth';
-import { doc, setDoc, getDoc } from 'firebase/firestore';
+import { doc, setDoc, getDoc, collection, addDoc } from 'firebase/firestore';
 import { auth, db } from './firebase';
 
 // User data interface
@@ -19,8 +19,67 @@ export interface UserData {
   whatsappNumber: string;
   createdAt: Date;
   lastLogin?: Date;
-  applicationStatus?: 'draft' | 'in_progress' | 'submitted' | 'approved' | 'rejected';
+  applicationStatus?: 'interested' | 'applied' | 'in_review' | 'qualified' | 'admitted' | 'enrolled' | 'deferred' | 'expired';
 }
+
+// Lead creation function
+const createLeadFromSignup = async (
+  user: User,
+  firstName: string,
+  lastName: string,
+  email: string,
+  whatsappNumber: string
+): Promise<void> => {
+  try {
+    console.log('📋 Creating lead from student signup...');
+    
+    // Create lead document in Firestore
+    const leadData = {
+      // Required fields
+      status: "INTERESTED",
+      source: "APPLICANT_PORTAL", 
+      createdAt: new Date(),
+      updatedAt: new Date(),
+      
+      // Contact info (separated names)
+      firstName: firstName,
+      lastName: lastName,
+      email: email,
+      whatsappNumber: whatsappNumber,
+      
+      // Timeline with initial entry
+      timeline: [{
+        date: new Date(),
+        action: "CREATED",
+        status: "INTERESTED",
+        notes: "Lead created from applicant portal signup",
+        metadata: {
+          whatsappMessageSent: false,
+          emailNotificationSent: false
+        }
+      }],
+      
+      // Creation tracking with email and firstName
+      createdBy: {
+        uid: user.uid,
+        email: email,
+        firstName: firstName,
+        role: "student"
+      }
+    };
+    
+    // Save to Firestore leads collection
+    const leadsCollection = collection(db, 'leads');
+    const leadDocRef = await addDoc(leadsCollection, leadData);
+    
+    console.log('✅ Lead created with ID:', leadDocRef.id);
+    
+  } catch (error) {
+    console.error('❌ Error creating lead from signup:', error);
+    // Don't throw error - lead creation failure shouldn't break signup
+    // Just log it for monitoring
+  }
+};
 
 // Sign up with email and password using Firebase Auth directly
 export const signUpWithEmail = async (
@@ -47,7 +106,7 @@ export const signUpWithEmail = async (
       lastName,
       whatsappNumber,
       createdAt: new Date(),
-      applicationStatus: 'draft'
+      applicationStatus: 'interested'
     };
     
     // Save to Firestore users collection
@@ -55,6 +114,9 @@ export const signUpWithEmail = async (
     await setDoc(userDocRef, userData);
     
     console.log('✅ User data saved to Firestore');
+    
+    // Create lead from signup
+    await createLeadFromSignup(user, firstName, lastName, email, whatsappNumber);
     
     // Send email verification
     await sendEmailVerification(user);
@@ -98,7 +160,7 @@ export const getUserData = async (uid: string): Promise<UserData | null> => {
         whatsappNumber: userData.whatsappNumber || '',
         createdAt: userData.createdAt?.toDate() || new Date(),
         lastLogin: userData.lastLogin?.toDate(),
-        applicationStatus: userData.applicationStatus || 'draft',
+        applicationStatus: userData.applicationStatus || 'interested',
       };
       
       return formattedUserData;

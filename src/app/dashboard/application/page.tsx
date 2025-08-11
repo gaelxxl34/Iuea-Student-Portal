@@ -286,29 +286,24 @@ export default function ApplicationPage() {
 
   const getStatusColor = (status: string) => {
     switch (status?.toLowerCase()) {
-      case 'submitted':
+      case 'interested':
         return 'text-blue-600 bg-blue-100';
-      case 'under_review':
+      case 'applied':
+        return 'text-purple-600 bg-purple-100';
+      case 'in_review':
         return 'text-yellow-600 bg-yellow-100';
-      case 'approved':
+      case 'qualified':
+        return 'text-orange-600 bg-orange-100';
+      case 'admitted':
         return 'text-green-600 bg-green-100';
-      case 'rejected':
+      case 'enrolled':
+        return 'text-emerald-600 bg-emerald-100';
+      case 'deferred':
+        return 'text-amber-600 bg-amber-100';
+      case 'expired':
         return 'text-red-600 bg-red-100';
       default:
         return 'text-gray-600 bg-gray-100';
-    }
-  };
-
-  const getStageColor = (stage: string) => {
-    switch (stage?.toLowerCase()) {
-      case 'new':
-        return 'text-blue-600 bg-blue-50 border-blue-200';
-      case 'processing':
-        return 'text-yellow-600 bg-yellow-50 border-yellow-200';
-      case 'completed':
-        return 'text-green-600 bg-green-50 border-green-200';
-      default:
-        return 'text-gray-600 bg-gray-50 border-gray-200';
     }
   };
 
@@ -995,9 +990,6 @@ export default function ApplicationPage() {
                 <div className="flex flex-wrap gap-2">
                   <span className={`px-3 py-1 rounded-full text-sm font-medium ${getStatusColor(submittedApplication.status)}`}>
                     {submittedApplication.status.replace('_', ' ').toUpperCase()}
-                  </span>
-                  <span className={`px-3 py-1 rounded-lg text-sm font-medium border ${getStageColor(submittedApplication.stage)}`}>
-                    Stage: {submittedApplication.stage.replace('_', ' ').toUpperCase()}
                   </span>
                 </div>
                 
