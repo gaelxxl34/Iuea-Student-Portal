@@ -462,7 +462,7 @@ export default function ApplicationPage() {
       
       showSuccess(
         'Application Submitted Successfully!',
-        `Your application has been submitted successfully!\n\nApplication ID: ${result.applicationId}\nLead ID: ${result.leadId}\n\nYou can now track your application status and upload documents.`,
+        `Your application has been submitted successfully! You can now track your application status and upload documents.`,
         8000
       );
       
@@ -599,7 +599,7 @@ export default function ApplicationPage() {
       
       showSuccess(
         'Application Updated Successfully!',
-        `Your application has been updated successfully!\n\nApplication ID: ${submittedApplication.id}\n\nChanges have been saved to your application record.`,
+        `Your application has been updated successfully! Changes have been saved to your application record.`,
         7000
       );
       
