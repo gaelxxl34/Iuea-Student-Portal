@@ -791,7 +791,9 @@ export default function ApplicationPage() {
     if (applicationData.intake.trim()) completedFields++;
     if (applicationData.howDidYouHear.trim()) completedFields++;
     
-    return Math.round((completedFields / totalFields) * 100);
+    const percentage = Math.round((completedFields / totalFields) * 100);
+    // Ensure percentage never exceeds 100% or goes below 0%
+    return Math.max(0, Math.min(100, percentage));
   };
 
   // Clean, organized countries list with flag emojis - prioritizing African countries and common destinations
@@ -1030,12 +1032,12 @@ export default function ApplicationPage() {
             <div className="p-4 bg-gradient-to-r from-blue-50 to-indigo-50 border border-blue-200 rounded-lg">
               <div className="flex items-center justify-between mb-2">
                 <span className="text-blue-800 font-medium">Application Progress</span>
-                <span className="text-blue-600 font-bold">{submittedApplication.progress.progressPercentage}%</span>
+                <span className="text-blue-600 font-bold">{Math.max(0, Math.min(100, submittedApplication.progress.progressPercentage))}%</span>
               </div>
               <div className="w-full bg-blue-200 rounded-full h-2 mb-2">
                 <div 
                   className="bg-blue-600 h-2 rounded-full transition-all duration-300" 
-                  style={{ width: `${submittedApplication.progress.progressPercentage}%` }}
+                  style={{ width: `${Math.max(0, Math.min(100, submittedApplication.progress.progressPercentage))}%` }}
                 ></div>
               </div>
               <p className="text-blue-700 text-sm">

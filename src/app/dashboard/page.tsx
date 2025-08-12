@@ -251,7 +251,7 @@ export default function Dashboard() {
     <div className="p-4 md:p-6">
       {/* Page Header */}
       <div className="mb-6">
-        <h1 className="text-xl md:text-2xl font-bold text-slate-800">Student Portal</h1>
+        <h1 className="text-xl md:text-2xl font-bold text-slate-800">Application Portal</h1>
         <p className="text-sm md:text-base text-slate-600">
           Welcome back, {userData?.firstName || user.displayName || 'Student'}!
         </p>
@@ -311,8 +311,8 @@ export default function Dashboard() {
           </div>
           <div className="w-full bg-[#EDEDED] rounded-full h-2.5">
             <div 
-              className="bg-[#780000] h-2.5 rounded-full" 
-              style={{ width: `${applicationStatus.progressPercentage}%` }}
+              className="bg-[#780000] h-2.5 rounded-full transition-all duration-300" 
+              style={{ width: `${Math.max(0, Math.min(100, applicationStatus.progressPercentage))}%` }}
             ></div>
           </div>
         </div>

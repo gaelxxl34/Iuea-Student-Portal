@@ -209,7 +209,7 @@ export default function SignUpPage() {
               className="w-32 h-32 mx-auto mb-3 object-contain"
             />
             <h1 className="text-xl font-bold text-[#333333] mb-2">Welcome to IUEA</h1>
-            <p className="text-[#333333]/70 text-sm">Create your student portal account</p>
+            <p className="text-[#333333]/70 text-sm">Create your application portal account</p>
           </div>
 
           {/* Desktop Header - Bigger Logo */}

@@ -20,7 +20,7 @@ import { ref, uploadBytes, getDownloadURL, deleteObject } from 'firebase/storage
 import { signInAnonymously } from 'firebase/auth';
 import { db, storage, auth } from '@/lib/firebase';
 
-// Application data interface for student portal form submissions
+// Application data interface for application portal form submissions
 export interface StudentApplicationData {
   firstName: string;
   lastName: string;
@@ -654,17 +654,19 @@ class StudentApplicationService {
     statusBgColor: string;
     nextAction: string;
   } {
-    const totalSteps = 4;
+    const totalSteps = 5; // 5 steps total for better granularity
     let completedSteps = 0;
+    let progressPercentage = 0; // Default to 0%
     let status = 'Not Started';
     let statusColor = 'text-gray-800';
     let statusBgColor = 'bg-gray-100';
     let nextAction = 'Start Your Application';
 
-    // Determine progress based on application status and data completeness
+    // Determine progress based on application status with fixed percentages
     switch (application.status?.toLowerCase()) {
       case 'interested':
         completedSteps = 0;
+        progressPercentage = 0;
         status = 'Interest Expressed';
         statusColor = 'text-blue-800';
         statusBgColor = 'bg-blue-100';
@@ -673,6 +675,7 @@ class StudentApplicationService {
         
       case 'applied':
         completedSteps = 1;
+        progressPercentage = 20; // Fixed 20%
         status = 'Application Submitted';
         statusColor = 'text-purple-800';
         statusBgColor = 'bg-purple-100';
@@ -681,6 +684,7 @@ class StudentApplicationService {
       
       case 'in_review':
         completedSteps = 2;
+        progressPercentage = 40; // Fixed 40%
         status = 'Under Review';
         statusColor = 'text-yellow-800';
         statusBgColor = 'bg-yellow-100';
@@ -689,6 +693,7 @@ class StudentApplicationService {
       
       case 'qualified':
         completedSteps = 3;
+        progressPercentage = 60; // Fixed 60%
         status = 'Qualified';
         statusColor = 'text-orange-800';
         statusBgColor = 'bg-orange-100';
@@ -697,6 +702,7 @@ class StudentApplicationService {
       
       case 'admitted':
         completedSteps = 4;
+        progressPercentage = 80; // Fixed 80%
         status = 'Admitted';
         statusColor = 'text-green-800';
         statusBgColor = 'bg-green-100';
@@ -705,14 +711,16 @@ class StudentApplicationService {
       
       case 'enrolled':
         completedSteps = 5;
+        progressPercentage = 100; // Fixed 100%
         status = 'Enrolled';
         statusColor = 'text-emerald-800';
         statusBgColor = 'bg-emerald-100';
-        nextAction = 'Access Student Portal';
+        nextAction = 'Access Application Portal';
         break;
         
       case 'deferred':
-        completedSteps = 3;
+        completedSteps = 0;
+        progressPercentage = 0; // Fixed 0% for deferred
         status = 'Deferred';
         statusColor = 'text-amber-800';
         statusBgColor = 'bg-amber-100';
@@ -720,23 +728,17 @@ class StudentApplicationService {
         break;
         
       case 'expired':
-        completedSteps = 1;
+        completedSteps = 0;
+        progressPercentage = 0; // Fixed 0% for expired
         status = 'Application Expired';
         statusColor = 'text-red-800';
         statusBgColor = 'bg-red-100';
         nextAction = 'Submit New Application';
         break;
       
-      case 'enrolled':
-        completedSteps = 4;
-        status = 'Enrolled';
-        statusColor = 'text-green-800';
-        statusBgColor = 'bg-green-100';
-        nextAction = 'Prepare for Classes';
-        break;
-      
       case 'rejected':
-        completedSteps = 2;
+        completedSteps = 0;
+        progressPercentage = 0; // Fixed 0% for rejected
         status = 'Application Declined';
         statusColor = 'text-red-800';
         statusBgColor = 'bg-red-100';
@@ -746,7 +748,8 @@ class StudentApplicationService {
       default:
         // Check if documents are available to determine step
         if (application.passportPhoto || application.academicDocuments || application.identificationDocument) {
-          completedSteps = 2;
+          completedSteps = 1;
+          progressPercentage = 15; // Slight progress for document upload
           status = 'Documents Uploaded';
           statusColor = 'text-blue-800';
           statusBgColor = 'bg-blue-100';
@@ -755,7 +758,8 @@ class StudentApplicationService {
         break;
     }
 
-    const progressPercentage = Math.round((completedSteps / totalSteps) * 100);
+    // Ensure progress percentage never exceeds 100% or goes below 0%
+    progressPercentage = Math.max(0, Math.min(100, progressPercentage));
 
     return {
       completedSteps,

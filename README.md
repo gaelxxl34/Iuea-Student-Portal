@@ -1,6 +1,6 @@
-# Nyota Student Portal
+# Nyota Application Portal
 
-A modern student portal built with Next.js and Firebase for the International University of East Africa (IUEA).
+A modern application portal built with Next.js and Firebase for the International University of East Africa (IUEA).
 
 ## Features
 
