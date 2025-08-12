@@ -41,10 +41,10 @@ const createLeadFromSignup = async (
       createdAt: new Date(),
       updatedAt: new Date(),
       
-      // Contact info (separated names)
-      firstName: firstName,
-      lastName: lastName,
+      // Contact info (only combined name)
+      name: `${firstName || ""} ${lastName || ""}`.trim(),
       email: email,
+      phone: whatsappNumber, // Also include as phone field for consistency
       whatsappNumber: whatsappNumber,
       
       // Timeline with initial entry
@@ -59,11 +59,11 @@ const createLeadFromSignup = async (
         }
       }],
       
-      // Creation tracking with email and firstName
+      // Creation tracking with email and name
       createdBy: {
         uid: user.uid,
         email: email,
-        firstName: firstName,
+        name: `${firstName || ""} ${lastName || ""}`.trim(),
         role: "student"
       }
     };
