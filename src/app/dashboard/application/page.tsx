@@ -323,7 +323,7 @@ export default function ApplicationPage() {
     if (!formData.phone.trim()) errors.push('Phone number is required');
     if (!formData.countryOfBirth.trim()) errors.push('Country of birth is required');
     if (!formData.gender.trim()) errors.push('Gender is required');
-    if (!formData.postalAddress.trim()) errors.push('Postal address is required');
+    if (!formData.postalAddress.trim()) errors.push('Physical address is required');
     
     // Required academic fields
     if (!formData.program.trim()) errors.push('Program selection is required');
@@ -357,7 +357,7 @@ export default function ApplicationPage() {
         error.includes('First name') || error.includes('Last name') || 
         error.includes('Email') || error.includes('Phone') || 
         error.includes('Country') || error.includes('Gender') || 
-        error.includes('Postal address')
+        error.includes('Physical address')
       );
       
       const programErrors = validation.errors.filter(error => 
@@ -494,7 +494,7 @@ export default function ApplicationPage() {
         error.includes('First name') || error.includes('Last name') || 
         error.includes('Email') || error.includes('Phone') || 
         error.includes('Country') || error.includes('Gender') || 
-        error.includes('Postal address')
+        error.includes('Physical address')
       );
       
       const programErrors = validation.errors.filter(error => 
@@ -809,6 +809,7 @@ export default function ApplicationPage() {
     '🇸🇴 Somalia',
     '🇪🇷 Eritrea',
     '🇩🇯 Djibouti',
+    '🇨🇩 Democratic Republic of Congo',
     
     // Other African Countries
     '🇳🇬 Nigeria',
@@ -822,7 +823,6 @@ export default function ApplicationPage() {
     '🇸🇩 Sudan',
     '🇹🇩 Chad',
     '🇨🇫 Central African Republic',
-    '🇨🇩 Democratic Republic of Congo',
     '🇨🇬 Republic of Congo',
     '🇨🇲 Cameroon',
     '🇬🇦 Gabon',
@@ -1082,7 +1082,7 @@ export default function ApplicationPage() {
               </div>
               
               <div>
-                <label className="block text-sm font-medium text-slate-600 mb-1">Postal Address</label>
+                <label className="block text-sm font-medium text-slate-600 mb-1">Physical Address</label>
                 <p className="text-slate-800">{submittedApplication.postalAddress}</p>
               </div>
             </div>
@@ -1714,7 +1714,7 @@ export default function ApplicationPage() {
                 
                 <div>
                   <label className="block text-sm font-medium text-slate-800 mb-2">
-                    Postal Address <span className="text-red-600">*</span>
+                    Physical Address <span className="text-red-600">*</span>
                   </label>
                   <textarea
                     value={applicationData.postalAddress}
@@ -1724,9 +1724,9 @@ export default function ApplicationPage() {
                     className={`w-full px-4 py-3 rounded-lg border-2 border-slate-200 text-base resize-none ${
                       isEditing ? 'bg-white' : 'bg-[#f7f7f7]'
                     }`}
-                    placeholder="Enter your postal address (P.O. Box, street, city, postal code)"
+                    placeholder="Enter your physical address (P.O. Box, street, city, postal code)"
                   />
-                  <p className="text-xs text-slate-500 mt-1">Enter your postal address (P.O. Box, street, city, postal code)</p>
+                  <p className="text-xs text-slate-500 mt-1">Enter your physical address (P.O. Box, street, city, postal code)</p>
                 </div>
                 
                 {/* Passport Photo Section */}

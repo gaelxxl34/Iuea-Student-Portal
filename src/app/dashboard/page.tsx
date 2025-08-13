@@ -195,12 +195,10 @@ export default function Dashboard() {
       id: 1, 
       name: applicationData.preferredProgram || 'Program Not Specified',
       faculty: 'Faculty of Computing & Engineering', // This could be mapped from program
-      deadline: 'Aug 15, 2025', 
-      tuition: '$2,500 / semester',
       status: 'Applied'
     }
   ] : [
-    { id: 1, name: 'No program selected yet', faculty: '', deadline: 'Aug 15, 2025', tuition: '', status: 'Not Selected' },
+    { id: 1, name: 'No program selected yet', faculty: '', status: 'Not Selected' },
   ];
 
   // Admission announcements
@@ -369,18 +367,6 @@ export default function Dashboard() {
                     </span>
                   </div>
                   {program.faculty && <p className="text-xs md:text-sm text-slate-600 mb-1">{program.faculty}</p>}
-                  <div className="flex flex-col sm:flex-row sm:justify-between text-xs mt-2 text-slate-500 gap-1">
-                    <div className="flex items-center">
-                      <i className="ri-calendar-line mr-1"></i>
-                      <span>Application Deadline: {program.deadline}</span>
-                    </div>
-                    {program.tuition && (
-                      <div className="flex items-center">
-                        <i className="ri-money-dollar-circle-line mr-1"></i>
-                        <span>{program.tuition}</span>
-                      </div>
-                    )}
-                  </div>
                 </div>
               ))}
             </div>
