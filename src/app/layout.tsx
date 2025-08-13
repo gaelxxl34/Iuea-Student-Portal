@@ -1,4 +1,4 @@
-import type { Metadata } from "next";
+import type { Metadata, Viewport } from "next";
 import { Geist, Geist_Mono } from "next/font/google";
 import "./globals.css";
 import { AuthProvider } from "@/contexts/AuthContext";
@@ -13,6 +13,11 @@ const geistMono = Geist_Mono({
   subsets: ["latin"],
 });
 
+export const viewport: Viewport = {
+  width: "device-width",
+  initialScale: 1,
+};
+
 export const metadata: Metadata = {
   title: "Student Application Portal - International University of East Africa",
   description: "Official student application portal for International University of East Africa (IUEA). Submit your applications, track application status, and manage your admission process online.",
@@ -21,7 +26,6 @@ export const metadata: Metadata = {
   creator: "International University of East Africa",
   publisher: "International University of East Africa",
   robots: "index, follow",
-  viewport: "width=device-width, initial-scale=1",
   icons: {
     icon: "/small logo iuea.png",
     shortcut: "/small logo iuea.png",
