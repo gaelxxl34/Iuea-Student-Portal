@@ -1,4 +1,6 @@
 // WhatsApp number verification service using MAYTAPI
+import { APP_CONFIG } from '@/config/app.config';
+
 interface WhatsAppVerificationResponse {
   success: boolean;
   exists: boolean;
@@ -7,10 +9,10 @@ interface WhatsAppVerificationResponse {
 }
 
 export class WhatsAppVerificationService {
-  private static readonly PRODUCT_ID = process.env.NEXT_PUBLIC_MAYTAPI_PRODUCT_ID || 'eae79c59-f48d-4fd2-9feb-c65fc1d317df';
-  private static readonly TOKEN = process.env.NEXT_PUBLIC_MAYTAPI_TOKEN || '4dba0328-0c7e-4749-9b39-588ec18259cb';
-  private static readonly PHONE_ID = process.env.NEXT_PUBLIC_MAYTAPI_PHONE_ID || '104228';
-  private static readonly API_BASE_URL = 'https://api.maytapi.com/api';
+  private static readonly PRODUCT_ID = APP_CONFIG.EXTERNAL.MAYTAPI.PRODUCT_ID;
+  private static readonly TOKEN = APP_CONFIG.EXTERNAL.MAYTAPI.TOKEN;
+  private static readonly PHONE_ID = APP_CONFIG.EXTERNAL.MAYTAPI.PHONE_ID;
+  private static readonly API_BASE_URL = APP_CONFIG.EXTERNAL.MAYTAPI.BASE_URL;
 
   /**
    * Verify if a phone number is registered on WhatsApp

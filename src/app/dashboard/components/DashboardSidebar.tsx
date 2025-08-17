@@ -30,7 +30,7 @@ const SidebarItem = ({ path, icon, label }: SidebarItemProps) => {
 };
 
 export default function DashboardSidebar({ isMobile, isOpen }: DashboardSidebarProps) {
-  // Navigation items - only essential pages for admission process
+  // Navigation items - always accessible regardless of application status
   const navItems = [
     { path: '/dashboard', icon: 'dashboard-line', label: 'Dashboard' },
     { path: '/dashboard/application', icon: 'file-list-3-line', label: 'My Application' },
@@ -52,10 +52,10 @@ export default function DashboardSidebar({ isMobile, isOpen }: DashboardSidebarP
     >
       {/* Sidebar Content */}
       <div className="py-2">
-        {/* Application Status */}
+        {/* Quick Navigation Info */}
         <div className="px-4 py-2 mb-4">
-          <span className="text-xs font-medium text-slate-500">APPLICATION STATUS</span>
-          <p className="text-sm font-medium">Documents Pending</p>
+          <span className="text-xs font-medium text-slate-500 uppercase">Student Portal</span>
+          <p className="text-sm font-medium text-slate-700">Navigation</p>
         </div>
 
         {/* Navigation */}
@@ -65,7 +65,20 @@ export default function DashboardSidebar({ isMobile, isOpen }: DashboardSidebarP
           ))}
         </nav>
         
-        {/* Separator */}
+        {/* Help Section */}
+        <div className="mt-6 px-4 py-3 mx-2 bg-slate-50 rounded-lg">
+          <div className="text-xs font-medium text-slate-600 mb-2">Need Help?</div>
+          <div className="space-y-1">
+            <div className="flex items-center text-xs text-slate-600">
+              <i className="ri-phone-line mr-2 text-red-600"></i>
+              <span>+256 414 142 631</span>
+            </div>
+            <div className="flex items-center text-xs text-slate-600">
+              <i className="ri-mail-line mr-2 text-red-600"></i>
+              <span>admissions@iuea.ac.ug</span>
+            </div>
+          </div>
+        </div>
         
         {/* Logout Option (mobile only) */}
         {isMobile && (

@@ -40,7 +40,7 @@ export const useDocumentAccess = (
     } finally {
       setLoading(false);
     }
-  }, [filePath, options]);
+  }, [filePath, JSON.stringify(options)]); // Stringify options to avoid object reference issues
 
   useEffect(() => {
     fetchUrl();
@@ -90,7 +90,7 @@ export const useMultipleDocumentAccess = (
     } finally {
       setLoading(false);
     }
-  }, [filePaths, options]);
+  }, [JSON.stringify(filePaths), JSON.stringify(options)]); // Stringify arrays and objects to avoid reference issues
 
   useEffect(() => {
     fetchUrls();
@@ -126,6 +126,14 @@ export const useApplicationDocuments = (application: {
   const [error, setError] = useState<string | null>(null);
 
   const fetchDocuments = useCallback(async () => {
+    // If no application ID, don't fetch anything
+    if (!application?.id) {
+      setDocuments({});
+      setLoading(false);
+      setError(null);
+      return;
+    }
+
     try {
       setLoading(true);
       setError(null);
@@ -166,7 +174,12 @@ export const useApplicationDocuments = (application: {
     } finally {
       setLoading(false);
     }
-  }, [application]);
+  }, [
+    application?.id,
+    application?.passportPhoto,
+    application?.academicDocuments,
+    application?.identificationDocument
+  ]);
 
   useEffect(() => {
     fetchDocuments();

@@ -20,13 +20,26 @@ const nextConfig: NextConfig = {
     formats: ['image/webp', 'image/avif'],
   },
 
-  // Security headers - commented out for server deployment
-  // Note: These headers should be configured in nginx instead
-  /*
+  // Security headers - configured for iframe embedding
   async headers() {
     return [
       {
-        source: '/(.*)',
+        // Allow iframe embedding for the embed routes
+        source: '/embed/(.*)',
+        headers: [
+          {
+            key: 'X-Frame-Options',
+            value: 'ALLOWALL',
+          },
+          {
+            key: 'Content-Security-Policy',
+            value: "frame-ancestors *;",
+          },
+        ],
+      },
+      {
+        // Secure headers for all other routes
+        source: '/((?!embed).*)',
         headers: [
           {
             key: 'X-Content-Type-Options',
@@ -44,7 +57,6 @@ const nextConfig: NextConfig = {
       },
     ];
   },
-  */
 
   // Remove static export for server deployment
   // output: process.env.NODE_ENV === 'production' ? 'export' : undefined,

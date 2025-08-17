@@ -31,6 +31,7 @@ const MobileNavItem = ({ path, icon, label }: MobileNavItemProps) => {
 };
 
 export default function MobileNavigation() {
+  // Navigation items - always accessible regardless of application status
   const navItems = [
     { path: '/dashboard', icon: 'dashboard-line', label: 'Home' },
     { path: '/dashboard/application', icon: 'file-list-3-line', label: 'Apply' },
@@ -38,7 +39,7 @@ export default function MobileNavigation() {
   ];
   
   return (
-    <div className="fixed bottom-0 left-0 right-0 bg-white border-t border-slate-200 flex justify-around items-center h-16 shadow-lg z-50">
+    <div className="fixed bottom-0 left-0 right-0 bg-white border-t border-slate-200 flex justify-around items-center h-16 shadow-lg z-50 lg:hidden">
       {navItems.map((item) => (
         <MobileNavItem key={item.path} {...item} />
       ))}

@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useEffect, useCallback } from 'react';
+import { useState, useEffect, useCallback, useMemo } from 'react';
 import Link from 'next/link';
 import Image from 'next/image';
 import { useAuth } from '@/contexts/AuthContext';
@@ -29,9 +29,23 @@ export default function DocumentsPage() {
     }
   });
 
-  // Document access hook for selected application
+  // Create stable application object for the hook
+  const stableApplication = useMemo(() => {
+    if (!selectedApplication || !selectedApplication.id) {
+      return { id: '', passportPhoto: '', academicDocuments: '', identificationDocument: '' };
+    }
+    return {
+      id: selectedApplication.id,
+      passportPhoto: selectedApplication.passportPhoto || '',
+      academicDocuments: selectedApplication.academicDocuments || '',
+      identificationDocument: selectedApplication.identificationDocument || ''
+    };
+  }, [selectedApplication?.id, selectedApplication?.passportPhoto, selectedApplication?.academicDocuments, selectedApplication?.identificationDocument]);
+
+  // Document access hook for selected application - only when we have a valid application
+  const shouldFetchDocuments = Boolean(selectedApplication?.id);
   const { documents, loading: documentsLoading, refetch } = useApplicationDocuments(
-    selectedApplication || { id: '', passportPhoto: '', academicDocuments: '', identificationDocument: '' }
+    shouldFetchDocuments ? stableApplication : { id: '', passportPhoto: '', academicDocuments: '', identificationDocument: '' }
   );
 
   // Document categories - matching our 3 document types
@@ -49,6 +63,7 @@ export default function DocumentsPage() {
 
   const fetchApplications = useCallback(async () => {
     if (!user?.email) {
+      console.log('📋 No user email available, setting loading to false');
       setIsLoading(false);
       return;
     }
@@ -56,24 +71,28 @@ export default function DocumentsPage() {
     try {
       setIsLoading(true);
       setError(null);
+      console.log('📋 Fetching applications for user:', user.email);
       const userApplications = await studentApplicationService.getApplicationsByEmail(user.email);
+      console.log('📋 Applications fetched:', userApplications);
       setApplications(userApplications);
       
       // Auto-select first application if none selected
       if (userApplications.length > 0 && !selectedApplication) {
+        console.log('📋 Auto-selecting first application:', userApplications[0]);
         setSelectedApplication(userApplications[0]);
       }
       
     } catch (err) {
-      console.error('Failed to fetch applications:', err);
+      console.error('❌ Failed to fetch applications:', err);
       setError('Failed to load applications. Please try again.');
     } finally {
       setIsLoading(false);
     }
-  }, [user?.email, selectedApplication]);
+  }, [user?.email, selectedApplication?.id]); // Use selectedApplication.id instead of the whole object
 
   // Fetch applications when component mounts
   useEffect(() => {
+    console.log('📋 useEffect triggered for fetchApplications');
     fetchApplications();
   }, [fetchApplications]);
 
@@ -120,15 +139,113 @@ export default function DocumentsPage() {
     input.click();
   };
 
-  // Show loading skeleton
+  // Show loading skeleton - but always show navigation
   if (isLoading) {
-    return <DocumentsSkeleton />;
+    return (
+      <div className="pb-20 md:pb-0">
+        {/* Quick Navigation - Always visible */}
+        <div className="mb-6">
+          <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
+            <Link 
+              href="/dashboard" 
+              className="bg-white rounded-lg p-4 border border-slate-200 hover:border-red-800/30 transition-colors group"
+            >
+              <div className="flex items-center">
+                <div className="h-10 w-10 bg-red-50 rounded-lg flex items-center justify-center group-hover:bg-red-100 transition-colors">
+                  <i className="ri-dashboard-line text-red-800"></i>
+                </div>
+                <div className="ml-3">
+                  <h3 className="font-medium text-slate-800">Dashboard</h3>
+                  <p className="text-xs text-slate-600">Overview & Status</p>
+                </div>
+              </div>
+            </Link>
+
+            <Link 
+              href="/dashboard/application" 
+              className="bg-white rounded-lg p-4 border border-slate-200 hover:border-blue-800/30 transition-colors group"
+            >
+              <div className="flex items-center">
+                <div className="h-10 w-10 bg-blue-50 rounded-lg flex items-center justify-center group-hover:bg-blue-100 transition-colors">
+                  <i className="ri-file-list-3-line text-blue-800"></i>
+                </div>
+                <div className="ml-3">
+                  <h3 className="font-medium text-slate-800">My Application</h3>
+                  <p className="text-xs text-slate-600">Start or Edit</p>
+                </div>
+              </div>
+            </Link>
+
+            <div className="bg-green-50 rounded-lg p-4 border-2 border-green-200">
+              <div className="flex items-center">
+                <div className="h-10 w-10 bg-green-100 rounded-lg flex items-center justify-center">
+                  <i className="ri-file-upload-line text-green-800"></i>
+                </div>
+                <div className="ml-3">
+                  <h3 className="font-medium text-green-800">Documents</h3>
+                  <p className="text-xs text-green-600">Current Page</p>
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+        <DocumentsSkeleton />
+      </div>
+    );
   }
 
   // Show error state
   if (error) {
     return (
       <div className="pb-20 md:pb-0">
+        {/* Quick Navigation - Always visible */}
+        <div className="mb-6">
+          <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
+            <Link 
+              href="/dashboard" 
+              className="bg-white rounded-lg p-4 border border-slate-200 hover:border-red-800/30 transition-colors group"
+            >
+              <div className="flex items-center">
+                <div className="h-10 w-10 bg-red-50 rounded-lg flex items-center justify-center group-hover:bg-red-100 transition-colors">
+                  <i className="ri-dashboard-line text-red-800"></i>
+                </div>
+                <div className="ml-3">
+                  <h3 className="font-medium text-slate-800">Dashboard</h3>
+                  <p className="text-xs text-slate-600">Overview & Status</p>
+                </div>
+              </div>
+            </Link>
+
+            <Link 
+              href="/dashboard/application" 
+              className="bg-white rounded-lg p-4 border border-slate-200 hover:border-blue-800/30 transition-colors group"
+            >
+              <div className="flex items-center">
+                <div className="h-10 w-10 bg-blue-50 rounded-lg flex items-center justify-center group-hover:bg-blue-100 transition-colors">
+                  <i className="ri-file-list-3-line text-blue-800"></i>
+                </div>
+                <div className="ml-3">
+                  <h3 className="font-medium text-slate-800">My Application</h3>
+                  <p className="text-xs text-slate-600">Start or Edit</p>
+                </div>
+              </div>
+            </Link>
+
+            <div className="bg-green-50 rounded-lg p-4 border-2 border-green-200">
+              <div className="flex items-center">
+                <div className="h-10 w-10 bg-green-100 rounded-lg flex items-center justify-center">
+                  <i className="ri-file-upload-line text-green-800"></i>
+                </div>
+                <div className="ml-3">
+                  <h3 className="font-medium text-green-800">Documents</h3>
+                  <p className="text-xs text-green-600">Current Page</p>
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        {/* Error Message */}
         <div className="bg-red-50 border border-red-200 rounded-lg p-4">
           <div className="flex items-center">
             <i className="ri-error-warning-line text-red-600 text-lg mr-3"></i>
@@ -152,17 +269,101 @@ export default function DocumentsPage() {
   if (applications.length === 0) {
     return (
       <div className="pb-20 md:pb-0">
-        <div className="text-center py-12">
-          <i className="ri-file-list-line text-4xl text-slate-400 mb-4"></i>
-          <h3 className="text-lg font-medium text-slate-800 mb-2">No Applications Found</h3>
-          <p className="text-slate-600 mb-4">You haven&apos;t submitted any applications yet.</p>
-          <Link 
-            href="/dashboard/application"
-            className="inline-flex items-center px-4 py-2 bg-red-800 text-white rounded-lg hover:bg-red-900 transition-colors"
-          >
-            <i className="ri-add-line mr-2"></i>
-            Create Application
-          </Link>
+        {/* Header */}
+        <div className="mb-6">
+          <h1 className="text-xl md:text-2xl font-bold text-slate-800">Documents</h1>
+          <p className="text-sm md:text-base text-slate-600">
+            Upload and manage your application documents
+          </p>
+        </div>
+
+        {/* Navigation Card */}
+        <div className="bg-white rounded-lg border border-slate-200 p-6 mb-6">
+          <div className="flex items-center justify-between mb-4">
+            <h2 className="text-lg font-semibold text-slate-800">Quick Navigation</h2>
+          </div>
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+            <Link 
+              href="/dashboard" 
+              className="flex items-center p-3 border border-slate-200 rounded-lg hover:border-red-800/30 transition-colors group"
+            >
+              <div className="h-10 w-10 bg-red-50 rounded-lg flex items-center justify-center group-hover:bg-red-100 transition-colors mr-3">
+                <i className="ri-dashboard-line text-red-800"></i>
+              </div>
+              <div>
+                <h3 className="font-medium text-slate-800">Dashboard</h3>
+                <p className="text-xs text-slate-600">View overview</p>
+              </div>
+            </Link>
+            <Link 
+              href="/dashboard/application" 
+              className="flex items-center p-3 border border-slate-200 rounded-lg hover:border-blue-800/30 transition-colors group"
+            >
+              <div className="h-10 w-10 bg-blue-50 rounded-lg flex items-center justify-center group-hover:bg-blue-100 transition-colors mr-3">
+                <i className="ri-file-list-3-line text-blue-800"></i>
+              </div>
+              <div>
+                <h3 className="font-medium text-slate-800">My Application</h3>
+                <p className="text-xs text-slate-600">Start application</p>
+              </div>
+            </Link>
+          </div>
+        </div>
+
+        {/* No Applications Card */}
+        <div className="bg-blue-50 border border-blue-200 rounded-lg p-6 text-center">
+          <div className="max-w-md mx-auto">
+            <i className="ri-file-list-line text-4xl text-blue-600 mb-4"></i>
+            <h3 className="text-lg font-medium text-slate-800 mb-2">No Application Found</h3>
+            <p className="text-slate-600 mb-6">
+              You need to create and submit an application before you can upload documents. 
+              Documents are linked to your application and help support your admission process.
+            </p>
+            
+            <div className="space-y-3">
+              <Link 
+                href="/dashboard/application"
+                className="inline-flex items-center px-6 py-3 bg-red-800 text-white rounded-lg hover:bg-red-900 transition-colors font-medium"
+              >
+                <i className="ri-add-line mr-2"></i>
+                Start My Application
+              </Link>
+              <p className="text-xs text-slate-500">
+                Once your application is created, you can return here to upload required documents
+              </p>
+            </div>
+          </div>
+        </div>
+
+        {/* Help Section */}
+        <div className="mt-6 bg-white border border-slate-200 rounded-lg p-6">
+          <h3 className="font-medium text-slate-800 mb-3">
+            <i className="ri-question-line mr-2"></i>
+            What documents will I need?
+          </h3>
+          <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+            <div className="p-3 bg-slate-50 rounded-lg">
+              <div className="flex items-center mb-2">
+                <i className="ri-image-line text-slate-600 mr-2"></i>
+                <span className="font-medium text-sm">Passport Photo</span>
+              </div>
+              <p className="text-xs text-slate-600">Recent passport-style photograph with plain background</p>
+            </div>
+            <div className="p-3 bg-slate-50 rounded-lg">
+              <div className="flex items-center mb-2">
+                <i className="ri-file-text-line text-slate-600 mr-2"></i>
+                <span className="font-medium text-sm">Academic Documents</span>
+              </div>
+              <p className="text-xs text-slate-600">Transcripts, certificates, and academic records</p>
+            </div>
+            <div className="p-3 bg-slate-50 rounded-lg">
+              <div className="flex items-center mb-2">
+                <i className="ri-id-card-line text-slate-600 mr-2"></i>
+                <span className="font-medium text-sm">Identification</span>
+              </div>
+              <p className="text-xs text-slate-600">National ID, passport, or government-issued ID</p>
+            </div>
+          </div>
         </div>
       </div>
     );
@@ -224,6 +425,51 @@ export default function DocumentsPage() {
         <p className="text-sm md:text-base text-slate-800/70">
           Upload the required documents for your admission application. All documents must be clear and legible.
         </p>
+      </div>
+
+      {/* Quick Navigation */}
+      <div className="grid grid-cols-1 sm:grid-cols-3 gap-4 mb-6">
+        <Link 
+          href="/dashboard" 
+          className="bg-white rounded-lg p-4 border border-slate-200 hover:border-red-800/30 transition-colors group"
+        >
+          <div className="flex items-center">
+            <div className="h-10 w-10 bg-red-50 rounded-lg flex items-center justify-center group-hover:bg-red-100 transition-colors">
+              <i className="ri-dashboard-line text-red-800"></i>
+            </div>
+            <div className="ml-3">
+              <h3 className="font-medium text-slate-800">Dashboard</h3>
+              <p className="text-xs text-slate-600">Overview & Status</p>
+            </div>
+          </div>
+        </Link>
+
+        <Link 
+          href="/dashboard/application" 
+          className="bg-white rounded-lg p-4 border border-slate-200 hover:border-blue-800/30 transition-colors group"
+        >
+          <div className="flex items-center">
+            <div className="h-10 w-10 bg-blue-50 rounded-lg flex items-center justify-center group-hover:bg-blue-100 transition-colors">
+              <i className="ri-file-list-3-line text-blue-800"></i>
+            </div>
+            <div className="ml-3">
+              <h3 className="font-medium text-slate-800">My Application</h3>
+              <p className="text-xs text-slate-600">Edit & Update</p>
+            </div>
+          </div>
+        </Link>
+
+        <div className="bg-green-50 rounded-lg p-4 border-2 border-green-200">
+          <div className="flex items-center">
+            <div className="h-10 w-10 bg-green-100 rounded-lg flex items-center justify-center">
+              <i className="ri-file-upload-line text-green-800"></i>
+            </div>
+            <div className="ml-3">
+              <h3 className="font-medium text-green-800">Documents</h3>
+              <p className="text-xs text-green-600">Current Page</p>
+            </div>
+          </div>
+        </div>
       </div>
 
       {/* Application Selector */}

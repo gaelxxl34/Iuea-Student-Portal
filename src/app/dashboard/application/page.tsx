@@ -1,6 +1,7 @@
 'use client';
 
 import { useState, useEffect, useCallback } from 'react';
+import Link from 'next/link';
 import { useAuth } from '@/contexts/AuthContext';
 import { studentApplicationService, type Application, type StudentApplicationData } from '@/lib/applicationService';
 import { ApplicationSkeleton, ApplicationViewSkeleton } from '@/components/skeletons/ApplicationSkeleton';
@@ -980,6 +981,51 @@ export default function ApplicationPage() {
       {/* Submitted Application View */}
       {!isLoadingApplication && applicationMode === 'view' && submittedApplication && (
         <div className="space-y-6">
+          {/* Quick Navigation - Application View Mode */}
+          <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
+            <Link 
+              href="/dashboard" 
+              className="bg-white rounded-lg p-4 border border-slate-200 hover:border-red-800/30 transition-colors group"
+            >
+              <div className="flex items-center">
+                <div className="h-10 w-10 bg-red-50 rounded-lg flex items-center justify-center group-hover:bg-red-100 transition-colors">
+                  <i className="ri-dashboard-line text-red-800"></i>
+                </div>
+                <div className="ml-3">
+                  <h3 className="font-medium text-slate-800">Dashboard</h3>
+                  <p className="text-xs text-slate-600">Overview & Status</p>
+                </div>
+              </div>
+            </Link>
+
+            <div className="bg-blue-50 rounded-lg p-4 border-2 border-blue-200">
+              <div className="flex items-center">
+                <div className="h-10 w-10 bg-blue-100 rounded-lg flex items-center justify-center">
+                  <i className="ri-file-list-3-line text-blue-800"></i>
+                </div>
+                <div className="ml-3">
+                  <h3 className="font-medium text-blue-800">My Application</h3>
+                  <p className="text-xs text-blue-600">Current Page</p>
+                </div>
+              </div>
+            </div>
+
+            <Link 
+              href="/dashboard/documents" 
+              className="bg-white rounded-lg p-4 border border-slate-200 hover:border-green-800/30 transition-colors group"
+            >
+              <div className="flex items-center">
+                <div className="h-10 w-10 bg-green-50 rounded-lg flex items-center justify-center group-hover:bg-green-100 transition-colors">
+                  <i className="ri-file-upload-line text-green-800"></i>
+                </div>
+                <div className="ml-3">
+                  <h3 className="font-medium text-slate-800">Documents</h3>
+                  <p className="text-xs text-slate-600">Upload & Manage</p>
+                </div>
+              </div>
+            </Link>
+          </div>
+
           {/* Header with Application Status */}
           <div className="bg-white rounded-lg border border-slate-200 p-6">
             <div className="flex flex-col sm:flex-row sm:justify-between sm:items-start gap-4 mb-4">
@@ -1359,6 +1405,51 @@ export default function ApplicationPage() {
             </p>
           </div>
         )}
+      </div>
+
+      {/* Quick Navigation - Application Form Mode */}
+      <div className="grid grid-cols-1 sm:grid-cols-3 gap-4 mb-6">
+        <Link 
+          href="/dashboard" 
+          className="bg-white rounded-lg p-4 border border-slate-200 hover:border-red-800/30 transition-colors group"
+        >
+          <div className="flex items-center">
+            <div className="h-10 w-10 bg-red-50 rounded-lg flex items-center justify-center group-hover:bg-red-100 transition-colors">
+              <i className="ri-dashboard-line text-red-800"></i>
+            </div>
+            <div className="ml-3">
+              <h3 className="font-medium text-slate-800">Dashboard</h3>
+              <p className="text-xs text-slate-600">Overview & Status</p>
+            </div>
+          </div>
+        </Link>
+
+        <div className="bg-blue-50 rounded-lg p-4 border-2 border-blue-200">
+          <div className="flex items-center">
+            <div className="h-10 w-10 bg-blue-100 rounded-lg flex items-center justify-center">
+              <i className="ri-file-list-3-line text-blue-800"></i>
+            </div>
+            <div className="ml-3">
+              <h3 className="font-medium text-blue-800">My Application</h3>
+              <p className="text-xs text-blue-600">Current Page</p>
+            </div>
+          </div>
+        </div>
+
+        <Link 
+          href="/dashboard/documents" 
+          className="bg-white rounded-lg p-4 border border-slate-200 hover:border-green-800/30 transition-colors group"
+        >
+          <div className="flex items-center">
+            <div className="h-10 w-10 bg-green-50 rounded-lg flex items-center justify-center group-hover:bg-green-100 transition-colors">
+              <i className="ri-file-upload-line text-green-800"></i>
+            </div>
+            <div className="ml-3">
+              <h3 className="font-medium text-slate-800">Documents</h3>
+              <p className="text-xs text-slate-600">Upload & Manage</p>
+            </div>
+          </div>
+        </Link>
       </div>
 
       {/* Application Progress */}
@@ -1773,13 +1864,56 @@ export default function ApplicationPage() {
                 </div>
               </div>
               
-              <div className="mt-6 flex justify-end">
+              <div className="mt-6 flex flex-col sm:flex-row sm:justify-between gap-3">
                 <button
                   onClick={() => handleSectionClick('program')}
                   className="px-4 py-2 text-sm bg-red-800 text-white rounded-lg hover:bg-[#600000] transition-colors"
                 >
                   Next: Program Selection
                   <i className="ri-arrow-right-line ml-1"></i>
+                </button>
+
+                <button
+                  onClick={
+                    submittedApplication && isEditing 
+                      ? handleUpdateApplication 
+                      : submittedApplication && !isEditing 
+                      ? handleUpdateDocuments 
+                      : handleSubmitApplication
+                  }
+                  disabled={
+                    isSubmitting || 
+                    (!submittedApplication && (!isPersonalDetailsComplete() || !isProgramSelectionComplete() || !isAdditionalInfoComplete()))
+                  }
+                  className="px-4 py-2 text-sm bg-green-600 text-white rounded-lg hover:bg-green-700 transition-colors disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center"
+                >
+                  {isSubmitting ? (
+                    <>
+                      <i className="ri-loader-4-line mr-2 animate-spin"></i>
+                      {submittedApplication && isEditing 
+                        ? 'Updating...' 
+                        : submittedApplication && !isEditing 
+                        ? 'Updating...' 
+                        : 'Submitting...'
+                      }
+                    </>
+                  ) : (
+                    <>
+                      <i className={`${
+                        submittedApplication && isEditing 
+                          ? 'ri-save-line' 
+                          : submittedApplication && !isEditing 
+                          ? 'ri-upload-line' 
+                          : 'ri-send-plane-line'
+                      } mr-2`}></i>
+                      {submittedApplication && isEditing 
+                        ? 'Update Application' 
+                        : submittedApplication && !isEditing 
+                        ? 'Update Documents' 
+                        : 'Submit Application'
+                      }
+                    </>
+                  )}
                 </button>
               </div>
             </div>
@@ -2049,13 +2183,58 @@ export default function ApplicationPage() {
                   Previous: Personal Details
                 </button>
                 
-                <button
-                  onClick={() => handleSectionClick('additional')}
-                  className="px-4 py-2 text-sm bg-red-800 text-white rounded-lg hover:bg-[#600000] transition-colors"
-                >
-                  Next: Additional Information
-                  <i className="ri-arrow-right-line ml-1"></i>
-                </button>
+                <div className="flex flex-col sm:flex-row gap-3">
+                  <button
+                    onClick={() => handleSectionClick('additional')}
+                    className="px-4 py-2 text-sm bg-red-800 text-white rounded-lg hover:bg-[#600000] transition-colors"
+                  >
+                    Next: Additional Information
+                    <i className="ri-arrow-right-line ml-1"></i>
+                  </button>
+
+                  <button
+                    onClick={
+                      submittedApplication && isEditing 
+                        ? handleUpdateApplication 
+                        : submittedApplication && !isEditing 
+                        ? handleUpdateDocuments 
+                        : handleSubmitApplication
+                    }
+                    disabled={
+                      isSubmitting || 
+                      (!submittedApplication && (!isPersonalDetailsComplete() || !isProgramSelectionComplete() || !isAdditionalInfoComplete()))
+                    }
+                    className="px-4 py-2 text-sm bg-green-600 text-white rounded-lg hover:bg-green-700 transition-colors disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center"
+                  >
+                    {isSubmitting ? (
+                      <>
+                        <i className="ri-loader-4-line mr-2 animate-spin"></i>
+                        {submittedApplication && isEditing 
+                          ? 'Updating...' 
+                          : submittedApplication && !isEditing 
+                          ? 'Updating...' 
+                          : 'Submitting...'
+                        }
+                      </>
+                    ) : (
+                      <>
+                        <i className={`${
+                          submittedApplication && isEditing 
+                            ? 'ri-save-line' 
+                            : submittedApplication && !isEditing 
+                            ? 'ri-upload-line' 
+                            : 'ri-send-plane-line'
+                        } mr-2`}></i>
+                        {submittedApplication && isEditing 
+                          ? 'Update Application' 
+                          : submittedApplication && !isEditing 
+                          ? 'Update Documents' 
+                          : 'Submit Application'
+                        }
+                      </>
+                    )}
+                  </button>
+                </div>
               </div>
             </div>
           )}
@@ -2175,7 +2354,7 @@ export default function ApplicationPage() {
                 <p className="text-xs text-slate-500 mt-1">Any additional information you&apos;d like to share (optional)</p>
               </div>
               
-              <div className="mt-6 flex justify-between">
+              <div className="mt-6 flex flex-col sm:flex-row sm:justify-between gap-3">
                 <button
                   onClick={() => handleSectionClick('program')}
                   className="px-4 py-2 text-sm border border-slate-200 text-slate-800 rounded-lg hover:border-red-800 hover:text-red-800 transition-colors"
@@ -2183,92 +2362,52 @@ export default function ApplicationPage() {
                   <i className="ri-arrow-left-line mr-1"></i>
                   Previous: Program Selection
                 </button>
+
+                <button
+                  onClick={
+                    submittedApplication && isEditing 
+                      ? handleUpdateApplication 
+                      : submittedApplication && !isEditing 
+                      ? handleUpdateDocuments 
+                      : handleSubmitApplication
+                  }
+                  disabled={
+                    isSubmitting || 
+                    (!submittedApplication && (!isPersonalDetailsComplete() || !isProgramSelectionComplete() || !isAdditionalInfoComplete()))
+                  }
+                  className="px-4 py-2 text-sm bg-green-600 text-white rounded-lg hover:bg-green-700 transition-colors disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center"
+                >
+                  {isSubmitting ? (
+                    <>
+                      <i className="ri-loader-4-line mr-2 animate-spin"></i>
+                      {submittedApplication && isEditing 
+                        ? 'Updating...' 
+                        : submittedApplication && !isEditing 
+                        ? 'Updating...' 
+                        : 'Submitting...'
+                      }
+                    </>
+                  ) : (
+                    <>
+                      <i className={`${
+                        submittedApplication && isEditing 
+                          ? 'ri-save-line' 
+                          : submittedApplication && !isEditing 
+                          ? 'ri-upload-line' 
+                          : 'ri-send-plane-line'
+                      } mr-2`}></i>
+                      {submittedApplication && isEditing 
+                        ? 'Update Application' 
+                        : submittedApplication && !isEditing 
+                        ? 'Update Documents' 
+                        : 'Submit Application'
+                      }
+                    </>
+                  )}
+                </button>
               </div>
             </div>
           )}
-        </div>
-      </div>
-      
-      {/* Submit Application Section */}
-      <div className="mt-4 sm:mt-6 bg-white rounded-lg p-4 sm:p-6 border border-slate-200">
-        <div className="flex flex-col gap-4">
-          <div>
-            <h3 className="font-semibold text-slate-800 text-lg">
-              {submittedApplication && isEditing 
-                ? 'Update Application' 
-                : submittedApplication && !isEditing 
-                ? 'Update Documents' 
-                : 'Ready to Submit?'
-              }
-            </h3>
-            <p className="text-sm text-slate-600 mt-1">
-              {submittedApplication && isEditing
-                ? 'Save changes to update your submitted application with new information.'
-                : submittedApplication && !isEditing
-                ? 'Upload any missing documents to complete your application. This will update your existing application record.'
-                : 'Please review all sections before submitting your application.'
-              }
-            </p>
-          </div>
-          
-          {/* Submit Button */}
-          <div className="flex flex-col sm:flex-row gap-3">
-            {submittedApplication && (
-              <button
-                onClick={() => {
-                  setApplicationMode('view');
-                  setIsEditing(false);
-                }}
-                className="w-full sm:w-auto min-h-[44px] px-6 py-3 text-sm border border-slate-200 text-slate-800 rounded-lg hover:border-red-800 hover:text-red-800 transition-colors flex items-center justify-center"
-              >
-                <i className="ri-arrow-left-line mr-2"></i>
-                Back to Application
-              </button>
-            )}
-            
-            <button
-              onClick={
-                submittedApplication && isEditing 
-                  ? handleUpdateApplication 
-                  : submittedApplication && !isEditing 
-                  ? handleUpdateDocuments 
-                  : handleSubmitApplication
-              }
-              disabled={
-                isSubmitting || 
-                (!submittedApplication && (!isPersonalDetailsComplete() || !isProgramSelectionComplete() || !isAdditionalInfoComplete()))
-              }
-              className="w-full sm:w-auto min-h-[44px] bg-green-600 text-white px-6 py-3 text-base font-medium rounded-lg hover:bg-green-700 transition-colors disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center"
-            >
-              {isSubmitting ? (
-                <>
-                  <i className="ri-loader-4-line mr-2 animate-spin"></i>
-                  {submittedApplication && isEditing 
-                    ? 'Updating Application...' 
-                    : submittedApplication && !isEditing 
-                    ? 'Updating Documents...' 
-                    : 'Submitting Application...'
-                  }
-                </>
-              ) : (
-                <>
-                  <i className={`${
-                    submittedApplication && isEditing 
-                      ? 'ri-save-line' 
-                      : submittedApplication && !isEditing 
-                      ? 'ri-upload-line' 
-                      : 'ri-send-plane-line'
-                  } mr-2`}></i>
-                  {submittedApplication && isEditing 
-                    ? 'Update Application' 
-                    : submittedApplication && !isEditing 
-                    ? 'Update Documents' 
-                    : 'Submit Application'
-                  }
-                </>
-              )}
-            </button>
-          </div>
         </div>
       </div>
         </>

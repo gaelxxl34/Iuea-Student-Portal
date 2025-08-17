@@ -75,3 +75,6 @@ Thumbs.db
 .fleet
 *.swp
 *.swo
+
+# Example files
+/public/embed-example.html

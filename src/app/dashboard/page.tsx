@@ -255,6 +255,54 @@ export default function Dashboard() {
         </p>
       </div>
 
+      {/* Quick Navigation - Always Visible */}
+      <div className="grid grid-cols-1 sm:grid-cols-3 gap-4 mb-6">
+        <Link 
+          href="/dashboard" 
+          className="bg-white rounded-lg p-4 border border-slate-200 hover:border-red-800/30 transition-colors group"
+        >
+          <div className="flex items-center">
+            <div className="h-10 w-10 bg-red-50 rounded-lg flex items-center justify-center group-hover:bg-red-100 transition-colors">
+              <i className="ri-dashboard-line text-red-800"></i>
+            </div>
+            <div className="ml-3">
+              <h3 className="font-medium text-slate-800">Dashboard</h3>
+              <p className="text-xs text-slate-600">Overview & Status</p>
+            </div>
+          </div>
+        </Link>
+
+        <Link 
+          href="/dashboard/application" 
+          className="bg-white rounded-lg p-4 border border-slate-200 hover:border-red-800/30 transition-colors group"
+        >
+          <div className="flex items-center">
+            <div className="h-10 w-10 bg-blue-50 rounded-lg flex items-center justify-center group-hover:bg-blue-100 transition-colors">
+              <i className="ri-file-list-3-line text-blue-800"></i>
+            </div>
+            <div className="ml-3">
+              <h3 className="font-medium text-slate-800">My Application</h3>
+              <p className="text-xs text-slate-600">{applicationData ? 'Edit & Update' : 'Start Application'}</p>
+            </div>
+          </div>
+        </Link>
+
+        <Link 
+          href="/dashboard/documents" 
+          className="bg-white rounded-lg p-4 border border-slate-200 hover:border-red-800/30 transition-colors group"
+        >
+          <div className="flex items-center">
+            <div className="h-10 w-10 bg-green-50 rounded-lg flex items-center justify-center group-hover:bg-green-100 transition-colors">
+              <i className="ri-file-upload-line text-green-800"></i>
+            </div>
+            <div className="ml-3">
+              <h3 className="font-medium text-slate-800">Documents</h3>
+              <p className="text-xs text-slate-600">Upload & Manage</p>
+            </div>
+          </div>
+        </Link>
+      </div>
+
       {/* Application Status */}
       <div className="bg-white rounded-lg p-3 md:p-4 border border-[#EDEDED] mb-6">
         {applicationsError && (
