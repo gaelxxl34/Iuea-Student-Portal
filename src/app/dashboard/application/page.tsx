@@ -2,10 +2,17 @@
 
 import { useState, useEffect, useCallback } from 'react';
 import Link from 'next/link';
+import PhoneInput from 'react-phone-number-input';
+import { isValidPhoneNumber } from 'react-phone-number-input';
+import 'react-phone-number-input/style.css';
 import { useAuth } from '@/contexts/AuthContext';
 import { studentApplicationService, type Application, type StudentApplicationData } from '@/lib/applicationService';
 import { ApplicationSkeleton, ApplicationViewSkeleton } from '@/components/skeletons/ApplicationSkeleton';
 import { ToastContainer, useToast } from '@/components/Toast';
+import ProgressIndicator from '@/components/ui/progress-indicator';
+import { FileSizePreview } from '@/components/FileSizePreview';
+import { useUploadProgress } from '@/hooks/useUploadProgress';
+import { fileCompressionService, compressApplicationDocuments } from '@/lib/fileCompressionService';
 
 // Form data interface for the application form
 interface FormData {
@@ -56,6 +63,7 @@ interface UserDataWithOptionalPhone {
 export default function ApplicationPage() {
   const { user, userData, refreshUser } = useAuth();
   const { toasts, removeToast, showSuccess, showError, showWarning } = useToast();
+  const { progress, startProgress, updateFileProgress, updateStage, reset: resetProgress } = useUploadProgress();
   
   // Application form sections - matching frontend structure exactly
   const formSections = [
@@ -339,13 +347,28 @@ export default function ApplicationPage() {
       errors.push('Please enter a valid email address');
     }
     
+    // Phone number validation
+    if (formData.phone && !isValidPhoneNumber(formData.phone)) {
+      errors.push('Please enter a valid phone number with country code');
+    }
+    
+    // Sponsor phone validation (if provided)
+    if (formData.sponsorTelephone && !isValidPhoneNumber(formData.sponsorTelephone)) {
+      errors.push('Please enter a valid sponsor phone number with country code');
+    }
+    
+    // Sponsor email validation (if provided)
+    if (formData.sponsorEmail && !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(formData.sponsorEmail)) {
+      errors.push('Please enter a valid sponsor email address');
+    }
+    
     return {
       isValid: errors.length === 0,
       errors
     };
   };
 
-  // Handler for final application submission
+  // Handler for final application submission (OPTIMIZED VERSION)
   const handleSubmitApplication = async () => {
     if (!user?.uid) return;
     
@@ -394,6 +417,17 @@ export default function ApplicationPage() {
     
     try {
       setIsSubmitting(true);
+      resetProgress();
+      
+      // Prepare file names for progress tracking
+      const fileNames: string[] = [];
+      if (files.passportPhoto) fileNames.push(files.passportPhoto.name);
+      files.academicDocuments.forEach(file => fileNames.push(file.name));
+      files.identificationDocuments.forEach(file => fileNames.push(file.name));
+      
+      // Start progress tracking
+      startProgress(fileNames);
+      updateStage('preparing', 'Preparing your application...');
       
       // Transform form data to StudentApplicationData
       const studentData: StudentApplicationData = {
@@ -413,65 +447,109 @@ export default function ApplicationPage() {
         additionalNotes: applicationData.additionalNotes,
       };
       
-      // Create application and lead
-      const result = await studentApplicationService.createApplicationAndLead(studentData);
+      // Step 1: Compress files if they exist (OPTIMIZATION)
+      let processedFiles = files;
+      if (files.passportPhoto || files.academicDocuments?.length || files.identificationDocuments?.length) {
+        updateStage('compressing', 'Optimizing file sizes for faster upload...');
+        
+        try {
+          const compressionResult = await compressApplicationDocuments(files);
+          processedFiles = compressionResult;
+          
+          // Show compression results
+          const totalOriginalSize = compressionResult.compressionResults.reduce((sum, r) => sum + r.originalSize, 0);
+          const totalCompressedSize = compressionResult.compressionResults.reduce((sum, r) => sum + r.compressedSize, 0);
+          const savingsPercent = Math.round((1 - totalCompressedSize / totalOriginalSize) * 100);
+          
+          if (savingsPercent > 10) {
+            showSuccess(
+              'Files Optimized',
+              `File sizes reduced by ${savingsPercent}% for faster upload!`,
+              4000
+            );
+          }
+        } catch (compressionError) {
+          console.warn('File compression failed, proceeding with original files:', compressionError);
+          // Continue with original files if compression fails
+        }
+      }
+      
+      // Step 2: Submit application immediately (OPTIMIZATION - Don't wait for files)
+      updateStage('uploading', 'Submitting your application...');
+      
+      const result = await studentApplicationService.submitApplicationWithBackgroundDocuments(
+        studentData, 
+        processedFiles
+      );
       
       if (!result.success) {
-        throw new Error(result.message || 'Failed to create application and lead');
+        throw new Error(result.message || 'Failed to create application');
       }
-
-      // Upload documents if they exist
-      if (files.passportPhoto || files.academicDocuments?.length || files.identificationDocuments?.length) {
-        const uploads = [];
+      
+      // Step 3: Track document upload progress if files exist
+      if (result.documentProcessing) {
+        updateStage('uploading', 'Uploading documents...');
         
-        // Add passport photo
-        if (files.passportPhoto) {
-          uploads.push({
-            file: files.passportPhoto,
-            type: 'passportPhoto' as const,
-            applicationId: result.applicationId,
-            studentEmail: applicationData.email,
+        // Simulate progress for user feedback (since we can't track Firebase upload progress directly)
+        const progressInterval = setInterval(() => {
+          fileNames.forEach(fileName => {
+            const currentProgress = progress.files[fileName]?.progress || 0;
+            if (currentProgress < 90) {
+              updateFileProgress(fileName, Math.min(currentProgress + Math.random() * 15, 90));
+            }
           });
-        }
+        }, 1000);
         
-        // Add academic documents
-        if (files.academicDocuments?.length) {
-          uploads.push({
-            file: files.academicDocuments[0], // Take first for now
-            type: 'academicDocuments' as const,
-            applicationId: result.applicationId,
-            studentEmail: applicationData.email,
+        try {
+          // Wait for document processing to complete
+          const uploadResults = await result.documentProcessing;
+          clearInterval(progressInterval);
+          
+          // Update final progress
+          uploadResults.forEach((uploadResult, index) => {
+            const fileName = fileNames[index];
+            if (fileName) {
+              updateFileProgress(
+                fileName, 
+                100, 
+                uploadResult.success ? 'completed' : 'error',
+                uploadResult.success ? undefined : uploadResult.message
+              );
+            }
           });
+          
+          const successfulUploads = uploadResults.filter(r => r.success);
+          console.log(`✅ Background upload completed: ${successfulUploads.length}/${uploadResults.length} successful`);
+          
+        } catch (uploadError) {
+          clearInterval(progressInterval);
+          console.error('Document upload error:', uploadError);
+          // Don't fail the entire submission for document upload errors
         }
-        
-        // Add identification documents
-        if (files.identificationDocuments?.length) {
-          uploads.push({
-            file: files.identificationDocuments[0], // Take first for now
-            type: 'identificationDocument' as const,
-            applicationId: result.applicationId,
-            studentEmail: applicationData.email,
-          });
-        }
-        
-        // Upload documents
-        const uploadResults = await studentApplicationService.uploadMultipleDocuments(uploads);
-        
-        const successfulUploads = uploadResults.filter(r => r.success);
-        console.log(`✅ Uploaded ${successfulUploads.length}/${uploads.length} documents successfully`);
       }
+      
+      // Step 4: Finalize
+      updateStage('finalizing', 'Finalizing your submission...');
+      
+      // Brief delay for UX
+      await new Promise(resolve => setTimeout(resolve, 1000));
+      
+      updateStage('completed', 'Application submitted successfully!');
       
       showSuccess(
         'Application Submitted Successfully!',
-        `Your application has been submitted successfully! You can now track your application status and upload documents.`,
+        'Your application has been submitted! You can track your progress and upload additional documents anytime.',
         8000
       );
       
       // Refresh to show submitted application
-      await checkForSubmittedApplication();
+      setTimeout(async () => {
+        await checkForSubmittedApplication();
+      }, 2000);
       
     } catch (error) {
       console.error('Failed to submit application:', error);
+      updateStage('error', 'Submission failed');
       showError(
         'Submission Failed',
         `Failed to submit application: ${error instanceof Error ? error.message : 'Unknown error'}`,
@@ -715,10 +793,19 @@ export default function ApplicationPage() {
 
   // Handler for form data updates
   const handleInputChange = (field: string, value: string) => {
-    setApplicationData(prev => ({
-      ...prev,
-      [field]: value
-    }));
+    setApplicationData(prev => {
+      const updated = {
+        ...prev,
+        [field]: value
+      };
+      
+      // Clear program selection when mode of study or intake changes
+      if (field === 'modeOfStudy' || field === 'intake') {
+        updated.program = '';
+      }
+      
+      return updated;
+    });
   };
 
   // Handler for file uploads
@@ -773,6 +860,179 @@ export default function ApplicationPage() {
 
   const isAdditionalInfoComplete = () => {
     return applicationData.howDidYouHear;
+  };
+
+  // Program data organized by faculty, mode, and intake
+  const programData = {
+    'On Campus': {
+      'January': {
+        'Faculty of Business Management (FBM)': [
+          'Bachelor of Business Administration',
+          'Bachelor of Public Administration',
+          'Bachelor of Procurement & Logistics Management',
+          'Bachelor of Human Resource Management',
+          'Bachelor of Tourism & Hotel Management',
+          'Master of Business Administration (MBA)'
+        ],
+        'Faculty of Science and Technology (FST)': [
+          'CISCO (3 months)',
+          'Bachelor of Information Technology (Web Dev)',
+          'Bachelor of Information Technology (Mobile Programming)',
+          'Bachelor of Information Technology (Networking)',
+          'Bachelor of Science in Computer Science',
+          'Bachelor of Science in Environmental Science & Management',
+          'Bachelor of Science in Software Engineering',
+          'Bachelor of Science in Climate-Smart Agriculture',
+          'Master of Information Technology (MIT)'
+        ],
+        'Faculty of Engineering (FOE)': [
+          'Diploma in Architecture',
+          'Diploma in Civil Engineering',
+          'Diploma in Electrical Engineering',
+          'Bachelor of Architecture',
+          'Bachelor of Science in Civil Engineering',
+          'Bachelor of Science in Electrical Engineering',
+          'Bachelor of Science in Petroleum Engineering',
+          'Bachelor of Science in Mining Engineering',
+          'Bachelor of Science in Mechatronics & Robotics Engineering',
+          'Bachelor of Science in Communications Engineering'
+        ],
+        'Faculty of Law and Humanities (FLH)': [
+          'Bachelor of Laws',
+          'Bachelor of International Relations & Diplomatic Studies',
+          'Bachelor of Journalism & Communication Studies',
+          'Master of International Relations & Diplomatic Studies'
+        ],
+        'International Foundation Programme (IFP)': [
+          'Higher Education Access Programme in Physical Science',
+          'Higher Education Access Programme in Humanities'
+        ]
+      },
+      'May': {
+        'Faculty of Business Management (FBM)': [
+          'Bachelor of Business Administration',
+          'Bachelor of Public Administration',
+          'Bachelor of Procurement & Logistics Management',
+          'Bachelor of Human Resource Management',
+          'Bachelor of Tourism & Hotel Management',
+          'Master of Business Administration (MBA)'
+        ],
+        'Faculty of Science and Technology (FST)': [
+          'CISCO (3 months)',
+          'Bachelor of Information Technology (Web Dev)',
+          'Bachelor of Information Technology (Mobile Programming)',
+          'Bachelor of Information Technology (Networking)',
+          'Bachelor of Science in Computer Science',
+          'Bachelor of Science in Environmental Science & Management',
+          'Bachelor of Science in Software Engineering',
+          'Bachelor of Science in Climate-Smart Agriculture',
+          'Master of Information Technology (MIT)'
+        ]
+      },
+      'August': {
+        'Faculty of Business Management (FBM)': [
+          'Bachelor of Business Administration',
+          'Bachelor of Public Administration',
+          'Bachelor of Procurement & Logistics Management',
+          'Bachelor of Human Resource Management',
+          'Bachelor of Tourism & Hotel Management',
+          'Master of Business Administration (MBA)'
+        ],
+        'Faculty of Science and Technology (FST)': [
+          'CISCO (3 months)',
+          'Bachelor of Information Technology (Web Dev)',
+          'Bachelor of Information Technology (Mobile Programming)',
+          'Bachelor of Information Technology (Networking)',
+          'Bachelor of Science in Computer Science',
+          'Bachelor of Science in Environmental Science & Management',
+          'Bachelor of Science in Software Engineering',
+          'Bachelor of Science in Climate-Smart Agriculture',
+          'Master of Information Technology (MIT)'
+        ],
+        'Faculty of Engineering (FOE)': [
+          'Diploma in Architecture',
+          'Diploma in Civil Engineering',
+          'Diploma in Electrical Engineering',
+          'Bachelor of Architecture',
+          'Bachelor of Science in Civil Engineering',
+          'Bachelor of Science in Electrical Engineering',
+          'Bachelor of Science in Petroleum Engineering',
+          'Bachelor of Science in Mining Engineering',
+          'Bachelor of Science in Mechatronics & Robotics Engineering',
+          'Bachelor of Science in Communications Engineering'
+        ],
+        'Faculty of Law and Humanities (FLH)': [
+          'Bachelor of Laws',
+          'Bachelor of International Relations & Diplomatic Studies',
+          'Bachelor of Journalism & Communication Studies',
+          'Master of International Relations & Diplomatic Studies'
+        ],
+        'International Foundation Programme (IFP)': [
+          'Higher Education Access Programme in Physical Science',
+          'Higher Education Access Programme in Humanities'
+        ]
+      }
+    },
+    'Online': {
+      'January': {
+        'Faculty of Business Management (FBM)': [
+          'Bachelor of Business Administration',
+          'Master of Business Administration (MBA)'
+        ],
+        'Faculty of Science and Technology (FST)': [
+          'Bachelor of Information Technology'
+        ],
+        'Faculty of Law and Humanities (FLH)': [
+          'Bachelor of Laws (LLB)'
+        ],
+        'International Foundation Programme (IFP)': [
+          'International Foundation Programme (Physical Science)',
+          'International Foundation Programme (Humanities)'
+        ]
+      },
+      'May': {
+        'Faculty of Business Management (FBM)': [
+          'Bachelor of Business Administration',
+          'Master of Business Administration (MBA)'
+        ],
+        'Faculty of Science and Technology (FST)': [
+          'Bachelor of Information Technology'
+        ]
+      },
+      'August': {
+        'Faculty of Business Management (FBM)': [
+          'Bachelor of Business Administration',
+          'Master of Business Administration (MBA)'
+        ],
+        'Faculty of Science and Technology (FST)': [
+          'Bachelor of Information Technology'
+        ],
+        'Faculty of Law and Humanities (FLH)': [
+          'Bachelor of Laws (LLB)'
+        ],
+        'International Foundation Programme (IFP)': [
+          'International Foundation Programme (Physical Science)',
+          'International Foundation Programme (Humanities)'
+        ]
+      }
+    }
+  };
+
+  // Get available programs grouped by faculty based on mode of study and intake
+  const getAvailablePrograms = () => {
+    const { modeOfStudy, intake } = applicationData;
+    
+    if (!modeOfStudy || !intake) {
+      return {};
+    }
+    
+    return programData[modeOfStudy as keyof typeof programData]?.[intake as keyof typeof programData['On Campus']] || {};
+  };
+
+  // Get total count of programs across all faculties
+  const getTotalProgramCount = () => {
+    const programs = getAvailablePrograms();
+    return Object.values(programs).reduce((total: number, facultyPrograms) => total + (facultyPrograms as string[]).length, 0);
   };
 
   // Get form completion percentage
@@ -972,6 +1232,43 @@ export default function ApplicationPage() {
     <div className="pb-20 md:pb-0">
       {/* Toast Notifications */}
       <ToastContainer toasts={toasts} onClose={removeToast} />
+      
+      {/* Progress Indicator */}
+      {isSubmitting && (
+        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4">
+          <div className="bg-white rounded-lg p-6 max-w-md w-full">
+            <ProgressIndicator progress={progress} showDetails={true} />
+            
+            {progress.stage !== 'completed' && progress.stage !== 'error' && (
+              <div className="mt-4 flex items-center justify-center">
+                <button
+                  onClick={() => {
+                    setIsSubmitting(false);
+                    resetProgress();
+                  }}
+                  className="text-sm text-slate-600 hover:text-slate-800 transition-colors"
+                >
+                  Cancel
+                </button>
+              </div>
+            )}
+            
+            {progress.stage === 'completed' && (
+              <div className="mt-4 flex justify-center">
+                <button
+                  onClick={() => {
+                    setIsSubmitting(false);
+                    resetProgress();
+                  }}
+                  className="bg-green-600 text-white px-4 py-2 rounded-lg hover:bg-green-700 transition-colors"
+                >
+                  Continue
+                </button>
+              </div>
+            )}
+          </div>
+        </div>
+      )}
       
       {/* Loading State */}
       {isLoadingApplication && (
@@ -1338,18 +1635,18 @@ export default function ApplicationPage() {
             </p>
             <div className="flex flex-wrap gap-4">
               <a 
-                href="mailto:admissions@iuea.ac.ug" 
+                href="mailto:apply@iuea.ac.ug" 
                 className="inline-flex items-center text-blue-800 hover:text-blue-900"
               >
                 <i className="ri-mail-line mr-2"></i>
-                admissions@iuea.ac.ug
+                apply@iuea.ac.ug
               </a>
               <a 
-                href="tel:+256414142631" 
+                href="tel:+256790002000" 
                 className="inline-flex items-center text-blue-800 hover:text-blue-900"
               >
                 <i className="ri-phone-line mr-2"></i>
-                +256 414 142 631
+                +256 790 002 000
               </a>
             </div>
           </div>
@@ -1843,7 +2140,7 @@ export default function ApplicationPage() {
                         <div className="mt-2">
                           <input
                             type="file"
-                            accept="image/*"
+                            accept="image/jpeg,image/jpg,image/png"
                             onChange={(e) => handleFileUpload('passportPhoto', e.target.files)}
                             className="hidden"
                             id="passport-photo"
@@ -1890,7 +2187,11 @@ export default function ApplicationPage() {
                   {isSubmitting ? (
                     <>
                       <i className="ri-loader-4-line mr-2 animate-spin"></i>
-                      {submittedApplication && isEditing 
+                      {progress.stage === 'preparing' ? 'Preparing...' :
+                       progress.stage === 'compressing' ? 'Optimizing...' :
+                       progress.stage === 'uploading' ? 'Uploading...' :
+                       progress.stage === 'finalizing' ? 'Finalizing...' :
+                       submittedApplication && isEditing 
                         ? 'Updating...' 
                         : submittedApplication && !isEditing 
                         ? 'Updating...' 
@@ -1988,51 +2289,61 @@ export default function ApplicationPage() {
                     Program <span className="text-red-600">*</span>
                   </label>
                   {isEditing ? (
-                    <select
-                      value={applicationData.program}
-                      onChange={(e) => handleInputChange('program', e.target.value)}
-                      className="w-full px-3 py-2 rounded-lg border-2 border-slate-200 text-sm bg-white"
-                    >
-                      <option value="">Select Program</option>
-                      <optgroup label="Business and Management Programs">
-                        <option value="Bachelor of Business Administration">Bachelor of Business Administration</option>
-                        <option value="Bachelor of Public Administration">Bachelor of Public Administration</option>
-                        <option value="Bachelor of Procurement and Logistics Management">Bachelor of Procurement and Logistics Management</option>
-                        <option value="Bachelor of Tourism and Hotel Management">Bachelor of Tourism and Hotel Management</option>
-                        <option value="Bachelor of Human Resource Management">Bachelor of Human Resource Management</option>
-                        <option value="Bachelor of Journalism and Communication Studies">Bachelor of Journalism and Communication Studies</option>
-                        <option value="Master of Business Administration (MBA)">Master of Business Administration (MBA)</option>
-                      </optgroup>
-                      <optgroup label="Science and Technology Programs">
-                        <option value="Bachelor of Science in Computer Science">Bachelor of Science in Computer Science</option>
-                        <option value="Bachelor of Information Technology">Bachelor of Information Technology</option>
-                        <option value="Bachelor of Science in Software Engineering">Bachelor of Science in Software Engineering</option>
-                        <option value="Bachelor of Science in Climate Smart Agriculture">Bachelor of Science in Climate Smart Agriculture</option>
-                        <option value="Bachelor of Science in Environmental Science and Management">Bachelor of Science in Environmental Science and Management</option>
-                        <option value="Master of Information Technology">Master of Information Technology</option>
-                      </optgroup>
-                      <optgroup label="Engineering Programs">
-                        <option value="Bachelor of Science in Electrical Engineering">Bachelor of Science in Electrical Engineering</option>
-                        <option value="Bachelor of Science in Civil Engineering">Bachelor of Science in Civil Engineering</option>
-                        <option value="Bachelor of Architecture">Bachelor of Architecture</option>
-                        <option value="Bachelor of Science in Petroleum Engineering">Bachelor of Science in Petroleum Engineering</option>
-                        <option value="Bachelor of Science in Mechatronics and Robotics">Bachelor of Science in Mechatronics and Robotics</option>
-                        <option value="Bachelor of Science in Communications Engineering">Bachelor of Science in Communications Engineering</option>
-                        <option value="Bachelor of Science in Mining Engineering">Bachelor of Science in Mining Engineering</option>
-                        <option value="Diploma in Electrical Engineering">Diploma in Electrical Engineering</option>
-                        <option value="Diploma in Civil Engineering">Diploma in Civil Engineering</option>
-                        <option value="Diploma in Architecture">Diploma in Architecture</option>
-                      </optgroup>
-                      <optgroup label="Law and Humanities Programs">
-                        <option value="Bachelor of Laws (LLB)">Bachelor of Laws (LLB)</option>
-                        <option value="Bachelor of International Relations and Diplomatic Studies">Bachelor of International Relations and Diplomatic Studies</option>
-                        <option value="Master of International Relations and Diplomatic Studies">Master of International Relations and Diplomatic Studies</option>
-                      </optgroup>
-                      <optgroup label="Certificate Programs">
-                        <option value="Higher Education Access Programme - Arts">Higher Education Access Programme - Arts</option>
-                        <option value="Higher Education Access Programme - Sciences">Higher Education Access Programme - Sciences</option>
-                      </optgroup>
-                    </select>
+                    <div>
+                      <select
+                        value={applicationData.program}
+                        onChange={(e) => handleInputChange('program', e.target.value)}
+                        className="w-full px-3 py-2 rounded-lg border-2 border-slate-200 text-sm bg-white"
+                        disabled={!applicationData.modeOfStudy || !applicationData.intake}
+                      >
+                        <option value="">
+                          {!applicationData.modeOfStudy || !applicationData.intake 
+                            ? 'Please select Mode of Study and Intake first' 
+                            : 'Select Program'
+                          }
+                        </option>
+                        {Object.entries(getAvailablePrograms()).map(([faculty, programs]) => (
+                          <optgroup key={faculty} label={faculty}>
+                            {(programs as string[]).map((program) => (
+                              <option key={program} value={program}>
+                                {program}
+                              </option>
+                            ))}
+                          </optgroup>
+                        ))}
+                      </select>
+                      
+                      {/* Program availability info */}
+                      {applicationData.modeOfStudy && applicationData.intake && (
+                        <div className="mt-2 p-3 bg-blue-50 border border-blue-200 rounded-lg">
+                          <div className="flex items-start">
+                            <i className="ri-information-line text-blue-600 mr-2 mt-0.5"></i>
+                            <div>
+                              <p className="text-sm text-blue-700 font-medium mb-1">
+                                Available Programs for {applicationData.modeOfStudy} - {applicationData.intake} Intake
+                              </p>
+                              <p className="text-xs text-blue-600">
+                                Showing {getTotalProgramCount()} program(s) across {Object.keys(getAvailablePrograms()).length} faculties for your selected mode of study and intake.
+                                {getTotalProgramCount() === 0 && ' No programs are available for this combination.'}
+                              </p>
+                            </div>
+                          </div>
+                        </div>
+                      )}
+                      
+                      {(!applicationData.modeOfStudy || !applicationData.intake) && (
+                        <div className="mt-2 p-3 bg-amber-50 border border-amber-200 rounded-lg">
+                          <div className="flex items-start">
+                            <i className="ri-alert-line text-amber-600 mr-2 mt-0.5"></i>
+                            <div>
+                              <p className="text-sm text-amber-700">
+                                Please select both <strong>Mode of Study</strong> and <strong>Intake</strong> to see available programs organized by faculty.
+                              </p>
+                            </div>
+                          </div>
+                        </div>
+                      )}
+                    </div>
                   ) : (
                     <input
                       type="text"
@@ -2088,7 +2399,7 @@ export default function ApplicationPage() {
                         <input
                           type="file"
                           multiple
-                          accept=".pdf,.doc,.docx,.jpg,.jpeg,.png"
+                          accept=".pdf,.doc,.docx,image/jpeg,image/jpg,image/png"
                           onChange={(e) => handleFileUpload('academicDocuments', e.target.files)}
                           className="hidden"
                           id="academic-docs"
@@ -2153,7 +2464,7 @@ export default function ApplicationPage() {
                         <input
                           type="file"
                           multiple
-                          accept=".pdf,.doc,.docx,.jpg,.jpeg,.png"
+                          accept=".pdf,.doc,.docx,image/jpeg,image/jpg,image/png"
                           onChange={(e) => handleFileUpload('identificationDocuments', e.target.files)}
                           className="hidden"
                           id="id-docs"
@@ -2173,6 +2484,21 @@ export default function ApplicationPage() {
                   </div>
                 </div>
               </div>
+              
+              {/* File Size Preview */}
+              {(files.passportPhoto || 
+                files.academicDocuments.length > 0 || 
+                files.identificationDocuments.length > 0) && (
+                <div className="mt-6">
+                  <FileSizePreview
+                    files={{
+                      passportPhoto: files.passportPhoto,
+                      academicDocuments: files.academicDocuments,
+                      identificationDocuments: files.identificationDocuments
+                    }}
+                  />
+                </div>
+              )}
               
               <div className="mt-6 flex flex-col sm:flex-row sm:justify-between gap-3">
                 <button
@@ -2261,16 +2587,32 @@ export default function ApplicationPage() {
                     <label className="block text-sm font-medium text-slate-800 mb-1">
                       Sponsor Telephone
                     </label>
-                    <input
-                      type="text"
-                      value={applicationData.sponsorTelephone}
-                      onChange={(e) => handleInputChange('sponsorTelephone', e.target.value)}
-                      readOnly={!isEditing}
-                      className={`w-full px-3 py-2 rounded-lg border-2 border-slate-200 text-sm ${
-                        isEditing ? 'bg-white' : 'bg-[#f7f7f7]'
-                      }`}
-                    />
-                    <p className="text-xs text-slate-500 mt-1">Phone number of sponsor or parent/guardian</p>
+                    {isEditing ? (
+                      <div className="w-full px-3 py-2 rounded-lg border-2 border-slate-200 text-sm bg-white focus-within:border-red-800 hover:border-red-800/50 transition-colors">
+                        <PhoneInput
+                          international
+                          countryCallingCodeEditable={false}
+                          defaultCountry="UG"
+                          value={applicationData.sponsorTelephone}
+                          onChange={(value) => handleInputChange('sponsorTelephone', value || '')}
+                          placeholder="Enter sponsor's phone number"
+                          style={{
+                            '--PhoneInputCountryFlag-height': '1.2em',
+                            '--PhoneInputCountryFlag-width': '1.5em',
+                            '--PhoneInputCountrySelectArrow-color': '#666666',
+                            '--PhoneInputCountrySelectArrow-opacity': '0.8',
+                          }}
+                        />
+                      </div>
+                    ) : (
+                      <input
+                        type="text"
+                        value={applicationData.sponsorTelephone}
+                        readOnly
+                        className="w-full px-3 py-2 rounded-lg border-2 border-slate-200 text-sm bg-[#f7f7f7]"
+                      />
+                    )}
+                    <p className="text-xs text-slate-500 mt-1">Phone number of sponsor or parent/guardian with country code</p>
                   </div>
                   <div>
                     <label className="block text-sm font-medium text-slate-800 mb-1">
@@ -2284,8 +2626,9 @@ export default function ApplicationPage() {
                       className={`w-full px-3 py-2 rounded-lg border-2 border-slate-200 text-sm ${
                         isEditing ? 'bg-white' : 'bg-[#f7f7f7]'
                       }`}
+                      placeholder="sponsor@example.com"
                     />
-                    <p className="text-xs text-slate-500 mt-1">Email address of sponsor or parent/guardian</p>
+                    <p className="text-xs text-slate-500 mt-1">Valid email address of sponsor or parent/guardian</p>
                   </div>
                 </div>
               </div>

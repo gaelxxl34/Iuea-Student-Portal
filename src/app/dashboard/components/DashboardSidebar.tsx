@@ -71,11 +71,11 @@ export default function DashboardSidebar({ isMobile, isOpen }: DashboardSidebarP
           <div className="space-y-1">
             <div className="flex items-center text-xs text-slate-600">
               <i className="ri-phone-line mr-2 text-red-600"></i>
-              <span>+256 414 142 631</span>
+              <span>+256 790 002 000</span>
             </div>
             <div className="flex items-center text-xs text-slate-600">
               <i className="ri-mail-line mr-2 text-red-600"></i>
-              <span>admissions@iuea.ac.ug</span>
+              <span>apply@iuea.ac.ug</span>
             </div>
           </div>
         </div>

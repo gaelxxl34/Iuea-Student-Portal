@@ -150,18 +150,18 @@ export default function SignUpPage() {
   // Show email verification message after successful signup
   if (emailSent) {
     return (
-      <div className="min-h-screen bg-[#F7F7F7] flex items-center justify-center p-6">
-        <div className="w-full max-w-md bg-white rounded-xl shadow-lg p-8 text-center">
+      <div className="min-h-screen bg-[#F7F7F7] flex items-center justify-center p-4 sm:p-6">
+        <div className="w-full max-w-md bg-white rounded-xl shadow-lg p-6 sm:p-8 text-center">
           <div className="w-16 h-16 bg-green-100 rounded-full flex items-center justify-center mx-auto mb-4">
             <i className="ri-mail-send-line text-2xl text-green-600"></i>
           </div>
-          <h2 className="text-2xl font-bold text-[#333333] mb-2">Check Your Email</h2>
-          <p className="text-[#333333]/70 mb-6">
-            We&apos;ve sent a verification link to <strong>{formData.email}</strong>. 
+          <h2 className="text-xl sm:text-2xl font-bold text-[#333333] mb-2">Check Your Email</h2>
+          <p className="text-[#333333]/70 mb-6 text-sm sm:text-base">
+            We&apos;ve sent a verification link to <strong className="break-words">{formData.email}</strong>. 
             Please check your email and click the verification link to activate your account.
           </p>
           <div className="space-y-3">
-            <p className="text-sm text-[#333333]/60">
+            <p className="text-xs sm:text-sm text-[#333333]/60">
               Didn&apos;t receive the email? Check your spam folder or{' '}
               <button 
                 onClick={() => setEmailSent(false)}
@@ -172,7 +172,7 @@ export default function SignUpPage() {
             </p>
             <Link 
               href="/login" 
-              className="block w-full bg-[#780000] hover:bg-[#600000] text-white font-medium py-3 px-4 rounded-lg transition-colors"
+              className="block w-full bg-[#780000] hover:bg-[#600000] text-white font-medium py-3 px-4 rounded-lg transition-colors text-sm sm:text-base"
             >
               Go to Login
             </Link>
@@ -183,7 +183,7 @@ export default function SignUpPage() {
   }
 
   return (
-    <div className="min-h-screen bg-[#F7F7F7] lg:flex lg:h-screen lg:overflow-hidden">
+    <div className="min-h-screen bg-[#F7F7F7] lg:flex">
       {/* Left Image Panel - Desktop Only */}
       <div 
         className="hidden lg:block lg:w-3/5 bg-cover bg-center bg-no-repeat"
@@ -196,36 +196,37 @@ export default function SignUpPage() {
       >
       </div>
 
-      {/* Right Form Panel - Scrollable on mobile, fixed on desktop */}
-      <div className="flex-1 lg:w-2/5 flex flex-col justify-start lg:justify-center min-h-screen lg:h-screen bg-white p-6 lg:p-8 overflow-y-auto lg:overflow-hidden">
-        <div className="w-full max-w-md mx-auto py-6 lg:py-0">
-          {/* Mobile Brand Header */}
-          <div className="lg:hidden text-center mb-6">
-            <Image 
-              src="https://iuea.ac.ug/sitepad-data/uploads/2020/11/Website-Logo.png" 
-              alt="IUEA Logo" 
-              width={128}
-              height={128}
-              className="w-32 h-32 mx-auto mb-3 object-contain"
-            />
-            <h1 className="text-xl font-bold text-[#333333] mb-2">Welcome to IUEA</h1>
-            <p className="text-[#333333]/70 text-sm">Create your application portal account</p>
-          </div>
+      {/* Right Form Panel - Always scrollable */}
+      <div className="w-full lg:w-2/5 min-h-screen bg-white">
+        <div className="h-full overflow-y-auto">
+          <div className="w-full max-w-md mx-auto px-6 py-8 lg:px-8">
+            {/* Mobile Brand Header */}
+            <div className="lg:hidden text-center mb-6">
+              <Image 
+                src="https://iuea.ac.ug/sitepad-data/uploads/2020/11/Website-Logo.png" 
+                alt="IUEA Logo" 
+                width={128}
+                height={128}
+                className="w-32 h-32 mx-auto mb-3 object-contain"
+              />
+              <h1 className="text-xl font-bold text-[#333333] mb-2">Welcome to IUEA</h1>
+              <p className="text-[#333333]/70 text-sm">Create your application portal account</p>
+            </div>
 
-          {/* Desktop Header - Bigger Logo */}
-          <div className="hidden lg:block text-center mb-6">
-            <Image 
-              src="https://iuea.ac.ug/sitepad-data/uploads/2020/11/Website-Logo.png" 
-              alt="IUEA Logo" 
-              width={160}
-              height={160}
-              className="w-40 h-40 mx-auto mb-3 object-contain"
-            />
-            <h2 className="text-2xl font-bold text-[#333333] mb-1">Create Account</h2>
-            <p className="text-[#333333]/70">Join the IUEA student community</p>
-          </div>
+            {/* Desktop Header - Bigger Logo */}
+            <div className="hidden lg:block text-center mb-6">
+              <Image 
+                src="https://iuea.ac.ug/sitepad-data/uploads/2020/11/Website-Logo.png" 
+                alt="IUEA Logo" 
+                width={160}
+                height={160}
+                className="w-40 h-40 mx-auto mb-3 object-contain"
+              />
+              <h2 className="text-2xl font-bold text-[#333333] mb-1">Create Account</h2>
+              <p className="text-[#333333]/70">Join the IUEA student community</p>
+            </div>
 
-          <form onSubmit={handleSubmit} className="space-y-3">
+            <form onSubmit={handleSubmit} className="space-y-4">{/* Increased spacing from space-y-3 to space-y-4 */}
             {/* General Error Display */}
             {errors.general && (
               <div className="bg-red-100 border border-red-400 text-red-700 px-4 py-3 rounded-lg text-sm">
@@ -305,7 +306,7 @@ export default function SignUpPage() {
               <label htmlFor="whatsapp" className="block text-sm font-medium text-[#333333] mb-1">
                 WhatsApp Phone Number
               </label>
-              <div className="flex gap-2">
+              <div className="flex flex-col sm:flex-row gap-2">
                 <div className="flex-1">
                   <PhoneInput
                     international
@@ -331,7 +332,7 @@ export default function SignUpPage() {
                   type="button"
                   onClick={handleWhatsAppVerification}
                   disabled={whatsappVerifying || !formData.whatsappNumber.trim() || whatsappVerified}
-                  className={`px-4 py-2 rounded-lg border-2 transition-colors whitespace-nowrap text-sm font-medium ${
+                  className={`px-4 py-2 rounded-lg border-2 transition-colors whitespace-nowrap text-sm font-medium w-full sm:w-auto ${
                     whatsappVerified 
                       ? 'border-green-500 bg-green-500 text-white cursor-not-allowed'
                       : whatsappVerifying
@@ -461,7 +462,7 @@ export default function SignUpPage() {
             </p>
 
             {/* Legal & Login Link */}
-            <div className="space-y-2 text-center">
+            <div className="space-y-3 text-center pb-4">
               <p className="text-xs text-[#333333]/60">
                 By creating an account, you agree to the{` `} 
                 <Link href="/terms" className="text-[#780000] hover:underline">
@@ -483,6 +484,7 @@ export default function SignUpPage() {
           </form>
         </div>
       </div>
+    </div>
     </div>
   );
 }

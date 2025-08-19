@@ -201,20 +201,13 @@ export default function Dashboard() {
     { id: 1, name: 'No program selected yet', faculty: '', status: 'Not Selected' },
   ];
 
-  // Admission announcements
-  const admissionAnnouncements = [
-    { id: 1, title: 'August 2025 Application Deadline Extended', date: 'Aug 5, 2025', type: 'Important' },
-    { id: 2, title: 'Required Documents Submission Reminder', date: 'Aug 3, 2025', type: 'Reminder' },
-    { id: 3, title: 'New Programs Added for August Intake', date: 'Aug 1, 2025', type: 'Update' },
-  ];
-
   // Dynamic application checklist based on real data
   const applicationChecklist = [
     {
       id: 1,
       title: 'Create Account',
       completed: true, // If user exists, this is always completed
-      date: 'Aug 1, 2025'
+      // date: 'Aug 1, 2025'
     },
     {
       id: 2,
@@ -512,38 +505,6 @@ export default function Dashboard() {
             </div>
           </div>
           
-          {/* Announcements */}
-          <div className="card">
-            <div className="flex items-center justify-between mb-4">
-              <h2 className="text-base md:text-lg font-semibold text-[#333333]">Announcements</h2>
-              <button className="text-xs md:text-sm text-[#780000] hover:underline">
-                View All
-              </button>
-            </div>
-            
-            <div className="space-y-3">
-              {admissionAnnouncements.map((announcement) => (
-                <div key={announcement.id} className="p-3 border border-[#EDEDED] rounded-lg hover:border-[#780000]/30 transition-colors">
-                  <div className="flex flex-col sm:flex-row sm:justify-between sm:items-center mb-1 gap-1">
-                    <span 
-                      className={`text-xs px-2 py-0.5 rounded-full w-fit ${
-                        announcement.type === 'Important' 
-                          ? 'bg-red-100 text-red-700' 
-                          : announcement.type === 'Reminder'
-                          ? 'bg-yellow-100 text-yellow-700'
-                          : 'bg-blue-100 text-blue-700'
-                      }`}
-                    >
-                      {announcement.type}
-                    </span>
-                    <span className="text-xs text-[#333333]/60">{announcement.date}</span>
-                  </div>
-                  <h3 className="font-medium text-sm md:text-base">{announcement.title}</h3>
-                </div>
-              ))}
-            </div>
-          </div>
-          
           {/* Need Help */}
           <div className="bg-[#780000]/5 rounded-lg p-3 md:p-4">
             <h3 className="font-semibold text-[#333333] text-sm md:text-base">Need Help?</h3>
@@ -553,11 +514,11 @@ export default function Dashboard() {
             <div className="mt-3 space-y-2">
               <div className="flex items-center text-xs md:text-sm">
                 <i className="ri-phone-line w-4 md:w-5 text-[#780000]"></i>
-                <span>+256 702 000000</span>
+                <span>+256 790 002 000</span>
               </div>
               <div className="flex items-center text-xs md:text-sm">
                 <i className="ri-mail-line w-4 md:w-5 text-[#780000]"></i>
-                <span>admissions@iuea.ac.ug</span>
+                <span>apply@iuea.ac.ug</span>
               </div>
               <div className="flex items-center text-xs md:text-sm">
                 <i className="ri-whatsapp-line w-4 md:w-5 text-[#780000]"></i>

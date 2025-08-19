@@ -150,17 +150,32 @@ class StudentApplicationService {
   /**
    * Create application and lead directly in Firestore
    * Uses Firebase client SDK with proper authentication
+   * Updates existing leads from INTERESTED to APPLIED if they exist
    */
   async createApplicationAndLead(data: StudentApplicationData): Promise<DirectApplicationResponse> {
     try {
-      console.log('🎯 Creating application and lead directly...');
+      console.log('🎯 Creating application and checking for existing lead...');
       
       // Ensure user is authenticated before proceeding
       await this.ensureAuthenticated();
       
       const currentTime = new Date();
       const applicationId = this.generateApplicationId();
-      const leadId = this.generateLeadId();
+      
+      // 🔍 Check if a lead already exists for this email or phone
+      const existingLead = await this.findExistingLead(data.email, data.phone);
+      
+      let leadId: string;
+      let isUpdatingExistingLead = false;
+      
+      if (existingLead) {
+        leadId = existingLead.id;
+        isUpdatingExistingLead = true;
+        console.log(`📋 Found existing lead ${leadId} with status: ${existingLead.status}`);
+      } else {
+        leadId = this.generateLeadId();
+        console.log(`✨ Creating new lead ${leadId}`);
+      }
       
       // Prepare application data (matching backend structure exactly)
       const applicationData = {
@@ -208,24 +223,26 @@ class StudentApplicationService {
         notes: "",
 
         // Integration
-        leadId: leadId, // Will be populated when lead is created
+        leadId: leadId, // Link to existing or new lead
         whatsappMessageSent: false,
       };
 
-      // Create the initial timeline entry for lead
-      const initialTimelineEntry = {
+      // Create timeline entry based on whether we're updating or creating
+      const timelineEntry = {
         date: currentTime.toISOString(),
-        action: "CREATED",
+        action: isUpdatingExistingLead ? "APPLICATION_SUBMITTED" : "CREATED",
         status: LEAD_STATUSES.APPLIED,
-        notes: `Lead created from APPLICATION_FORM`,
+        notes: isUpdatingExistingLead 
+          ? `Lead status updated from ${existingLead?.status} to APPLIED - Application submitted`
+          : `Lead created from APPLICATION_FORM with APPLIED status`,
       };
 
       // Prepare lead data (matching backend structure exactly)
       const leadData = {
         // Basic Info
         status: LEAD_STATUSES.APPLIED,
-        source: LEAD_SOURCES.APPLICATION_FORM,
-        createdAt: currentTime.toISOString(),
+        source: existingLead?.source || LEAD_SOURCES.APPLICATION_FORM,
+        createdAt: existingLead?.createdAt || currentTime.toISOString(),
         updatedAt: currentTime.toISOString(),
 
         // Contact Info
@@ -246,24 +263,27 @@ class StudentApplicationService {
         additionalNotes: data.additionalNotes || null,
 
         // Assignment
-        assignedTo: null,
-        priority: "MEDIUM",
+        assignedTo: existingLead?.assignedTo || null,
+        priority: existingLead?.priority || "MEDIUM",
 
         // Tracking
-        totalInteractions: 0,
-        lastInteractionAt: null,
+        totalInteractions: existingLead?.totalInteractions || 0,
+        lastInteractionAt: existingLead?.lastInteractionAt || null,
         nextFollowUpDate: null,
 
-        // Timeline - with synchronized initial status
-        timeline: [initialTimelineEntry],
+        // Timeline - preserve existing timeline and add new entry
+        timeline: [
+          ...(existingLead?.timeline || []),
+          timelineEntry
+        ],
 
         // Notes
-        notes: "",
-        tags: [],
+        notes: existingLead?.notes || "",
+        tags: existingLead?.tags || [],
       };
 
       console.log('📋 Application data prepared:', applicationData);
-      console.log('� Lead data prepared with APPLIED status:', leadData);
+      console.log(`🔄 Lead data prepared - ${isUpdatingExistingLead ? 'UPDATING' : 'CREATING'} with APPLIED status:`, leadData);
 
       // Use Firestore batch to ensure atomicity
       const batch = writeBatch(db);
@@ -272,20 +292,24 @@ class StudentApplicationService {
       const applicationRef = doc(collection(db, 'applications'), applicationId);
       batch.set(applicationRef, applicationData);
       
-      // Add lead document
+      // Add or update lead document
       const leadRef = doc(collection(db, 'leads'), leadId);
       batch.set(leadRef, leadData);
       
       // Commit both documents atomically
       await batch.commit();
 
-      console.log('✅ Application and lead created successfully');
+      const actionMessage = isUpdatingExistingLead 
+        ? `Application created and existing lead ${leadId} updated from ${existingLead?.status} to APPLIED`
+        : `Application and new lead created successfully`;
+
+      console.log(`✅ ${actionMessage}`);
       console.log('📄 Application ID:', applicationId);
       console.log('👤 Lead ID:', leadId);
 
       return {
         success: true,
-        message: 'Application and lead created successfully',
+        message: actionMessage,
         applicationId: applicationId,
         leadId: leadId,
         application: applicationData,
@@ -317,6 +341,123 @@ class StudentApplicationService {
   }
 
   /**
+   * Find existing lead by email or phone number
+   * Prioritizes email match, then phone match
+   */
+  private async findExistingLead(email: string, phone: string): Promise<{
+    id: string;
+    status: string;
+    source: string;
+    createdAt: string;
+    assignedTo?: string;
+    priority?: string;
+    totalInteractions?: number;
+    lastInteractionAt?: string;
+    timeline?: Array<{
+      date: string;
+      action: string;
+      status: string;
+      notes: string;
+    }>;
+    notes?: string;
+    tags?: string[];
+  } | null> {
+    try {
+      console.log(`🔍 Searching for existing lead with email: ${email} or phone: ${phone}`);
+      
+      // Ensure authentication
+      await this.ensureAuthenticated();
+      
+      // Check if user is still authenticated after ensureAuthenticated
+      if (!auth.currentUser) {
+        console.warn('⚠️ User authentication failed, skipping lead search');
+        return null;
+      }
+      
+      const leadsRef = collection(db, 'leads');
+      
+      // First, try to find by email (primary identifier)
+      const emailQuery = query(
+        leadsRef,
+        where('email', '==', email.toLowerCase())
+      );
+      
+      const emailSnapshot = await getDocs(emailQuery);
+      
+      if (!emailSnapshot.empty) {
+        const leadDoc = emailSnapshot.docs[0];
+        const leadData = leadDoc.data();
+        
+        console.log(`✅ Found existing lead by email: ${leadDoc.id} with status: ${leadData.status}`);
+        
+        return {
+          id: leadDoc.id,
+          status: leadData.status,
+          source: leadData.source,
+          createdAt: leadData.createdAt,
+          assignedTo: leadData.assignedTo,
+          priority: leadData.priority,
+          totalInteractions: leadData.totalInteractions,
+          lastInteractionAt: leadData.lastInteractionAt,
+          timeline: leadData.timeline,
+          notes: leadData.notes,
+          tags: leadData.tags,
+        };
+      }
+      
+      // If no email match, try to find by phone number
+      const phoneQuery = query(
+        leadsRef,
+        where('phone', '==', phone)
+      );
+      
+      const phoneSnapshot = await getDocs(phoneQuery);
+      
+      if (!phoneSnapshot.empty) {
+        const leadDoc = phoneSnapshot.docs[0];
+        const leadData = leadDoc.data();
+        
+        console.log(`✅ Found existing lead by phone: ${leadDoc.id} with status: ${leadData.status}`);
+        
+        return {
+          id: leadDoc.id,
+          status: leadData.status,
+          source: leadData.source,
+          createdAt: leadData.createdAt,
+          assignedTo: leadData.assignedTo,
+          priority: leadData.priority,
+          totalInteractions: leadData.totalInteractions,
+          lastInteractionAt: leadData.lastInteractionAt,
+          timeline: leadData.timeline,
+          notes: leadData.notes,
+          tags: leadData.tags,
+        };
+      }
+      
+      console.log(`ℹ️ No existing lead found for email: ${email} or phone: ${phone}`);
+      return null;
+      
+    } catch (error: any) {
+      console.error('❌ Error searching for existing lead:', error);
+      
+      // Handle specific Firebase permission errors
+      if (error?.code === 'permission-denied') {
+        console.warn('⚠️ Permission denied accessing leads collection. User may not have required permissions.');
+      } else if (error?.code === 'unauthenticated') {
+        console.warn('⚠️ User is not authenticated. Attempting to re-authenticate...');
+        try {
+          await this.ensureAuthenticated();
+        } catch (authError) {
+          console.error('❌ Re-authentication failed:', authError);
+        }
+      }
+      
+      // Don't throw error, just return null to proceed with creating new lead
+      return null;
+    }
+  }
+
+  /**
    * Delete old document from Firebase Storage
    */
   async deleteOldDocument(applicationId: string, documentType: string): Promise<void> {
@@ -333,10 +474,12 @@ class StudentApplicationService {
       const applicationData = applicationDoc.data();
       const existingUrl = applicationData[documentType];
       
-      if (!existingUrl || existingUrl === '' || existingUrl === null) {
-        console.log(`ℹ️ No existing ${documentType} found for application ${applicationId}`);
+      if (!existingUrl || existingUrl === '' || existingUrl === null || typeof existingUrl !== 'string') {
+        console.log(`ℹ️ No existing ${documentType} found for application ${applicationId} or invalid URL type`);
         return;
       }
+      
+      console.log(`🔍 Found existing ${documentType} URL: ${existingUrl}`);
       
       // Extract storage path from different possible Firebase Storage URL formats
       let storagePath: string | null = null;
@@ -370,8 +513,16 @@ class StudentApplicationService {
         await deleteObject(oldFileRef);
         console.log(`✅ Successfully deleted old ${documentType}`);
         
-      } catch (parseError) {
-        console.warn(`⚠️ Error parsing URL for ${documentType}: ${existingUrl}`, parseError);
+      } catch (parseError: any) {
+        console.error(`❌ Error parsing URL for ${documentType}:`, parseError);
+        console.log(`🔍 Problematic URL: ${existingUrl}`);
+        console.log(`🔍 URL type: ${typeof existingUrl}`);
+        
+        // If it's a type error, log additional debug info
+        if (parseError instanceof TypeError) {
+          console.log(`🔍 TypeError details: ${parseError.message}`);
+        }
+        
         return;
       }
       
@@ -429,7 +580,12 @@ class StudentApplicationService {
       console.log(`📤 Uploading ${upload.type} for application ${upload.applicationId}...`);
       
       // 0. Delete old document first to save storage space
-      await this.deleteOldDocument(upload.applicationId, upload.type);
+      try {
+        await this.deleteOldDocument(upload.applicationId, upload.type);
+      } catch (deleteError) {
+        console.warn(`⚠️ Non-critical error deleting old document:`, deleteError);
+        // Continue with upload even if deletion fails
+      }
       
       // 1. Validate file
       if (!upload.file || upload.file.size === 0) {
@@ -501,34 +657,218 @@ class StudentApplicationService {
   }
 
   /**
-   * Upload multiple documents for an application
+   * Submit application immediately and process documents in background
+   * This provides instant feedback to users while documents upload asynchronously
+   */
+  async submitApplicationWithBackgroundDocuments(data: StudentApplicationData, files?: {
+    passportPhoto?: File;
+    academicDocuments: File[];
+    identificationDocuments: File[];
+  }): Promise<DirectApplicationResponse & { documentProcessing?: Promise<DocumentUploadResponse[]> }> {
+    try {
+      console.log('🚀 Starting optimized application submission...');
+      
+      // 1. Submit application immediately without waiting for documents
+      const applicationResult = await this.createApplicationAndLead(data);
+      
+      if (!applicationResult.success) {
+        throw new Error(applicationResult.message || 'Failed to create application');
+      }
+      
+      // 2. Start document processing in background if files exist
+      let documentProcessingPromise: Promise<DocumentUploadResponse[]> | undefined;
+      
+      if (files && (files.passportPhoto || files.academicDocuments?.length || files.identificationDocuments?.length)) {
+        console.log('📤 Starting background document processing...');
+        
+        const uploads: DocumentUpload[] = [];
+        
+        // Prepare upload array
+        if (files.passportPhoto) {
+          uploads.push({
+            file: files.passportPhoto,
+            type: 'passportPhoto' as const,
+            applicationId: applicationResult.applicationId,
+            studentEmail: data.email,
+          });
+        }
+        
+        if (files.academicDocuments?.length) {
+          uploads.push({
+            file: files.academicDocuments[0],
+            type: 'academicDocuments' as const,
+            applicationId: applicationResult.applicationId,
+            studentEmail: data.email,
+          });
+        }
+        
+        if (files.identificationDocuments?.length) {
+          uploads.push({
+            file: files.identificationDocuments[0],
+            type: 'identificationDocument' as const,
+            applicationId: applicationResult.applicationId,
+            studentEmail: data.email,
+          });
+        }
+        
+        // Start parallel document upload (don't await)
+        documentProcessingPromise = this.uploadMultipleDocuments(uploads);
+        
+        // Optionally handle completion in background
+        documentProcessingPromise.then((results) => {
+          const successCount = results.filter(r => r.success).length;
+          console.log(`✅ Background document processing completed: ${successCount}/${results.length} successful`);
+        }).catch((error) => {
+          console.error('❌ Background document processing failed:', error);
+        });
+      }
+      
+      return {
+        ...applicationResult,
+        documentProcessing: documentProcessingPromise
+      };
+      
+    } catch (error) {
+      console.error('❌ Error in optimized application submission:', error);
+      throw error;
+    }
+  }
+
+  /**
+   * Upload multiple documents with batch Firestore updates (OPTIMIZED)
+   */
+  async uploadMultipleDocumentsOptimized(uploads: DocumentUpload[]): Promise<DocumentUploadResponse[]> {
+    try {
+      console.log(`📤 Uploading ${uploads.length} documents with batch operations...`);
+      
+      // 1. Delete old documents in parallel
+      const deletePromises = uploads.map(upload => 
+        this.deleteOldDocument(upload.applicationId, upload.type).catch(err => {
+          console.warn(`⚠️ Failed to delete old ${upload.type}:`, err);
+        })
+      );
+      await Promise.all(deletePromises);
+      
+      // 2. Upload all files to storage in parallel
+      const uploadPromises = uploads.map(async (upload) => {
+        try {
+          // Validate file
+          if (!upload.file || upload.file.size === 0) {
+            throw new Error('No file provided or file is empty');
+          }
+
+          // Check file size (max 10MB)
+          const maxSize = 10 * 1024 * 1024;
+          if (upload.file.size > maxSize) {
+            throw new Error('File size must be less than 10MB');
+          }
+
+          // Generate unique filename
+          const timestamp = Date.now();
+          const fileExtension = upload.file.name.split('.').pop() || 'unknown';
+          const sanitizedEmail = upload.studentEmail.replace(/[^a-zA-Z0-9]/g, '_');
+          const fileName = `${upload.type}_${upload.applicationId}_${sanitizedEmail}_${timestamp}.${fileExtension}`;
+          const storagePath = `applications/${upload.applicationId}/documents/${fileName}`;
+          
+          // Upload to Firebase Storage
+          const storageRef = ref(storage, storagePath);
+          const uploadTask = await uploadBytes(storageRef, upload.file);
+          const downloadUrl = await getDownloadURL(uploadTask.ref);
+
+          return {
+            upload,
+            downloadUrl,
+            fileName,
+            success: true
+          };
+        } catch (error) {
+          console.error(`❌ Upload failed for ${upload.type}:`, error);
+          return {
+            upload,
+            downloadUrl: '',
+            fileName: '',
+            success: false,
+            error: error instanceof Error ? error.message : 'Unknown error'
+          };
+        }
+      });
+
+      const uploadResults = await Promise.all(uploadPromises);
+      
+      // 3. Batch update Firestore with all document URLs
+      const successfulUploads = uploadResults.filter(result => result.success);
+      
+      if (successfulUploads.length > 0) {
+        const applicationId = uploads[0].applicationId;
+        const updateData: Record<string, string | Date> = {
+          updatedAt: new Date(),
+        };
+        
+        // Add all document URLs to update
+        successfulUploads.forEach(result => {
+          updateData[result.upload.type] = result.downloadUrl;
+        });
+        
+        try {
+          const applicationRef = doc(db, 'applications', applicationId);
+          await updateDoc(applicationRef, updateData);
+          console.log(`✅ Batch updated Firestore with ${successfulUploads.length} document URLs`);
+        } catch (firestoreError) {
+          console.warn('⚠️ Files uploaded but Firestore batch update failed:', firestoreError);
+        }
+      }
+      
+      // 4. Format response
+      const results: DocumentUploadResponse[] = uploadResults.map(result => ({
+        success: result.success,
+        message: result.success 
+          ? `${result.upload.type} uploaded successfully`
+          : `Failed to upload ${result.upload.type}: ${result.error}`,
+        documentType: result.upload.type,
+        downloadUrl: result.downloadUrl,
+        fileName: result.fileName,
+      }));
+
+      const successCount = results.filter(r => r.success).length;
+      console.log(`✅ Batch upload completed: ${successCount}/${uploads.length} successful`);
+
+      return results;
+    } catch (error) {
+      console.error('❌ Error in optimized multiple document upload:', error);
+      throw error;
+    }
+  }
+
+  /**
+   * Upload multiple documents for an application (OPTIMIZED - Parallel processing)
    */
   async uploadMultipleDocuments(uploads: DocumentUpload[]): Promise<DocumentUploadResponse[]> {
     try {
-      console.log(`📤 Uploading ${uploads.length} documents...`);
+      console.log(`📤 Uploading ${uploads.length} documents in parallel...`);
       
-      const results: DocumentUploadResponse[] = [];
-      
-      // Upload documents sequentially to avoid overwhelming the server
-      for (const upload of uploads) {
+      // Process all uploads in parallel for better performance
+      const uploadPromises = uploads.map(async (upload) => {
         try {
           const result = await this.uploadDocumentAndUpdateFirestore(upload);
-          results.push(result);
+          return result;
         } catch (error) {
           console.error(`❌ Failed to upload ${upload.type}:`, error);
           const errorMessage = error instanceof Error ? error.message : 'Unknown error occurred';
-          results.push({
+          return {
             success: false,
             message: `Failed to upload ${upload.type}: ${errorMessage}`,
             documentType: upload.type,
             downloadUrl: '',
             fileName: '',
-          });
+          };
         }
-      }
+      });
+
+      // Wait for all uploads to complete
+      const results = await Promise.all(uploadPromises);
 
       const successCount = results.filter(r => r.success).length;
-      console.log(`✅ Uploaded ${successCount}/${uploads.length} documents successfully`);
+      console.log(`✅ Uploaded ${successCount}/${uploads.length} documents successfully (parallel processing)`);
 
       return results;
     } catch (error) {
