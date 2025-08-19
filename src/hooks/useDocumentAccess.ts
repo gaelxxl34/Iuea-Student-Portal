@@ -1,4 +1,4 @@
-import { useState, useEffect, useCallback } from 'react';
+import { useState, useEffect, useCallback, useMemo } from 'react';
 import { documentAccessService, DocumentAccessOptions } from '../lib/documentAccessService';
 
 interface UseDocumentAccessReturn {
@@ -19,6 +19,8 @@ export const useDocumentAccess = (
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
+  const stableOptions = useMemo(() => options, [options]);
+
   const fetchUrl = useCallback(async () => {
     if (!filePath) {
       setUrl(null);
@@ -31,7 +33,7 @@ export const useDocumentAccess = (
       setLoading(true);
       setError(null);
       
-      const documentUrl = await documentAccessService.getDocumentUrl(filePath, options);
+      const documentUrl = await documentAccessService.getDocumentUrl(filePath, stableOptions);
       setUrl(documentUrl);
     } catch (err) {
       const errorMessage = err instanceof Error ? err.message : 'Failed to get document URL';
@@ -40,7 +42,7 @@ export const useDocumentAccess = (
     } finally {
       setLoading(false);
     }
-  }, [filePath, JSON.stringify(options)]); // Stringify options to avoid object reference issues
+  }, [filePath, stableOptions]);
 
   useEffect(() => {
     fetchUrl();
@@ -69,8 +71,11 @@ export const useMultipleDocumentAccess = (
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
+  const stableFilePaths = useMemo(() => filePaths, [filePaths]);
+  const stableOptions = useMemo(() => options, [options]);
+
   const fetchUrls = useCallback(async () => {
-    if (filePaths.length === 0) {
+    if (stableFilePaths.length === 0) {
       setUrls({});
       setLoading(false);
       setError(null);
@@ -81,7 +86,7 @@ export const useMultipleDocumentAccess = (
       setLoading(true);
       setError(null);
       
-      const documentUrls = await documentAccessService.getMultipleDocumentUrls(filePaths, options);
+      const documentUrls = await documentAccessService.getMultipleDocumentUrls(stableFilePaths, stableOptions);
       setUrls(documentUrls);
     } catch (err) {
       const errorMessage = err instanceof Error ? err.message : 'Failed to get document URLs';
@@ -90,7 +95,7 @@ export const useMultipleDocumentAccess = (
     } finally {
       setLoading(false);
     }
-  }, [JSON.stringify(filePaths), JSON.stringify(options)]); // Stringify arrays and objects to avoid reference issues
+  }, [stableFilePaths, stableOptions]);
 
   useEffect(() => {
     fetchUrls();

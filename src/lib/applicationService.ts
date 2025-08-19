@@ -437,18 +437,21 @@ class StudentApplicationService {
       console.log(`ℹ️ No existing lead found for email: ${email} or phone: ${phone}`);
       return null;
       
-    } catch (error: any) {
+    } catch (error: unknown) {
       console.error('❌ Error searching for existing lead:', error);
       
       // Handle specific Firebase permission errors
-      if (error?.code === 'permission-denied') {
-        console.warn('⚠️ Permission denied accessing leads collection. User may not have required permissions.');
-      } else if (error?.code === 'unauthenticated') {
-        console.warn('⚠️ User is not authenticated. Attempting to re-authenticate...');
-        try {
-          await this.ensureAuthenticated();
-        } catch (authError) {
-          console.error('❌ Re-authentication failed:', authError);
+      if (error && typeof error === 'object' && 'code' in error) {
+        const firebaseError = error as { code: string };
+        if (firebaseError.code === 'permission-denied') {
+          console.warn('⚠️ Permission denied accessing leads collection. User may not have required permissions.');
+        } else if (firebaseError.code === 'unauthenticated') {
+          console.warn('⚠️ User is not authenticated. Attempting to re-authenticate...');
+          try {
+            await this.ensureAuthenticated();
+          } catch (authError) {
+            console.error('❌ Re-authentication failed:', authError);
+          }
         }
       }
       
@@ -513,7 +516,7 @@ class StudentApplicationService {
         await deleteObject(oldFileRef);
         console.log(`✅ Successfully deleted old ${documentType}`);
         
-      } catch (parseError: any) {
+      } catch (parseError: unknown) {
         console.error(`❌ Error parsing URL for ${documentType}:`, parseError);
         console.log(`🔍 Problematic URL: ${existingUrl}`);
         console.log(`🔍 URL type: ${typeof existingUrl}`);

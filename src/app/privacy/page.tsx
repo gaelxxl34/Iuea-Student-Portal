@@ -1,4 +1,5 @@
 import Image from 'next/image';
+import Link from 'next/link';
 import { Metadata } from 'next';
 
 export const metadata: Metadata = {
@@ -13,7 +14,7 @@ export default function PrivacyPage() {
         {/* Header with IUEA Logo */}
         <div className="bg-white rounded-lg shadow-sm p-6 mb-8">
           <div className="flex items-center justify-center mb-4">
-            <a 
+            <Link 
               href="/"
               className="cursor-pointer hover:opacity-80 transition-opacity"
               title="Back to Home"
@@ -25,7 +26,7 @@ export default function PrivacyPage() {
                 height={80}
                 className="object-contain"
               />
-            </a>
+            </Link>
           </div>
           <h1 className="text-3xl font-bold text-center text-[#780000] mb-2">
             Privacy Policy

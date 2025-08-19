@@ -84,7 +84,6 @@ export const useUploadProgress = (): UseUploadProgressReturn => {
 
       // Calculate estimated time remaining
       const currentTime = Date.now();
-      const elapsedTime = currentTime - startTimeRef.current;
       progressHistoryRef.current.push({ time: currentTime, progress: overall });
 
       let estimatedTimeRemaining: number | undefined;

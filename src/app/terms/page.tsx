@@ -1,4 +1,5 @@
 import Image from 'next/image';
+import Link from 'next/link';
 import { Metadata } from 'next';
 
 export const metadata: Metadata = {
@@ -13,7 +14,7 @@ export default function TermsPage() {
         {/* Header with IUEA Logo */}
         <div className="bg-white rounded-lg shadow-sm p-6 mb-8">
           <div className="flex items-center justify-center mb-4">
-            <a 
+            <Link 
               href="/"
               className="cursor-pointer hover:opacity-80 transition-opacity"
               title="Back to Home"
@@ -25,7 +26,7 @@ export default function TermsPage() {
                 height={80}
                 className="object-contain"
               />
-            </a>
+            </Link>
           </div>
           <h1 className="text-3xl font-bold text-center text-[#780000] mb-2">
             Terms and Conditions
@@ -79,7 +80,7 @@ export default function TermsPage() {
             <section className="mb-8">
               <h2 className="text-xl font-semibold text-[#780000] mb-4">4. Academic Integrity</h2>
               <p className="text-gray-700 mb-4">
-                All students using IUEA services must maintain academic integrity and follow the university's 
+                All students using IUEA services must maintain academic integrity and follow the university&apos;s 
                 academic policies and code of conduct.
               </p>
             </section>

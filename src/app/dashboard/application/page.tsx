@@ -12,7 +12,7 @@ import { ToastContainer, useToast } from '@/components/Toast';
 import ProgressIndicator from '@/components/ui/progress-indicator';
 import { FileSizePreview } from '@/components/FileSizePreview';
 import { useUploadProgress } from '@/hooks/useUploadProgress';
-import { fileCompressionService, compressApplicationDocuments } from '@/lib/fileCompressionService';
+import { compressApplicationDocuments } from '@/lib/fileCompressionService';
 
 // Form data interface for the application form
 interface FormData {

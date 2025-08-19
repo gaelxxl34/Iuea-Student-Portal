@@ -31,16 +31,13 @@ export default function DocumentsPage() {
 
   // Create stable application object for the hook
   const stableApplication = useMemo(() => {
-    if (!selectedApplication || !selectedApplication.id) {
-      return { id: '', passportPhoto: '', academicDocuments: '', identificationDocument: '' };
-    }
     return {
-      id: selectedApplication.id,
-      passportPhoto: selectedApplication.passportPhoto || '',
-      academicDocuments: selectedApplication.academicDocuments || '',
-      identificationDocument: selectedApplication.identificationDocument || ''
+      id: selectedApplication?.id || '',
+      passportPhoto: selectedApplication?.passportPhoto || '',
+      academicDocuments: selectedApplication?.academicDocuments || '',
+      identificationDocument: selectedApplication?.identificationDocument || ''
     };
-  }, [selectedApplication?.id, selectedApplication?.passportPhoto, selectedApplication?.academicDocuments, selectedApplication?.identificationDocument]);
+  }, [selectedApplication]);
 
   // Document access hook for selected application - only when we have a valid application
   const shouldFetchDocuments = Boolean(selectedApplication?.id);
@@ -88,7 +85,7 @@ export default function DocumentsPage() {
     } finally {
       setIsLoading(false);
     }
-  }, [user?.email, selectedApplication?.id]); // Use selectedApplication.id instead of the whole object
+  }, [user?.email, selectedApplication]);
 
   // Fetch applications when component mounts
   useEffect(() => {
