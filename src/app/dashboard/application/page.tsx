@@ -13,6 +13,7 @@ import ProgressIndicator from '@/components/ui/progress-indicator';
 import { FileSizePreview } from '@/components/FileSizePreview';
 import { useUploadProgress } from '@/hooks/useUploadProgress';
 import { compressApplicationDocuments } from '@/lib/fileCompressionService';
+import metaPixel from '@/lib/metaPixel';
 
 // Form data interface for the application form
 interface FormData {
@@ -136,6 +137,20 @@ export default function ApplicationPage() {
       }));
     }
   }, [userData]);
+
+  // Track page view and form interactions
+  useEffect(() => {
+    metaPixel.trackPageView('Application Page');
+  }, []);
+
+  // Track when user starts filling the application form
+  useEffect(() => {
+    const hasFormData = applicationData.firstName || applicationData.lastName || 
+                       applicationData.program || applicationData.modeOfStudy;
+    if (hasFormData && !submittedApplication) {
+      metaPixel.trackFormStart('application');
+    }
+  }, [applicationData.firstName, applicationData.lastName, applicationData.program, applicationData.modeOfStudy, submittedApplication]);
 
   // Also initialize form data when user loads
   useEffect(() => {
@@ -535,6 +550,17 @@ export default function ApplicationPage() {
       await new Promise(resolve => setTimeout(resolve, 1000));
       
       updateStage('completed', 'Application submitted successfully!');
+      
+      // 🎯 TRACK APPLICATION SUBMISSION TO META
+      metaPixel.trackApplicationSubmission({
+        email: applicationData.email,
+        firstName: applicationData.firstName,
+        lastName: applicationData.lastName,
+        phone: applicationData.phone,
+        program: applicationData.program
+      });
+
+      console.log('🎯 Meta Pixel: Application submission tracked for', applicationData.email);
       
       showSuccess(
         'Application Submitted Successfully!',

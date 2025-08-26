@@ -5,6 +5,7 @@ import PhoneInput from 'react-phone-number-input';
 import WhatsAppVerificationService from '@/lib/whatsapp-verification';
 import { useAuth } from '@/contexts/AuthContext';
 import { createAbsoluteUrl } from '@/config/app.config';
+import metaPixel from '@/lib/metaPixel';
 
 export default function EmbedSignUpPage() {
   const { signUp } = useAuth();
@@ -16,6 +17,8 @@ export default function EmbedSignUpPage() {
     password: ''
   });
 
+  const [submittedBy, setSubmittedBy] = useState<string>('');
+
   const [whatsappVerified, setWhatsappVerified] = useState(false);
   const [whatsappVerifying, setWhatsappVerifying] = useState(false);
   const [whatsappVerificationMessage, setWhatsappVerificationMessage] = useState('');
@@ -26,6 +29,25 @@ export default function EmbedSignUpPage() {
 
   // Auto-resize iframe functionality
   useEffect(() => {
+    // Extract submittedBy from URL parameters
+    const urlParams = new URLSearchParams(window.location.search);
+    const submittedByParam = urlParams.get('submittedBy');
+    if (submittedByParam) {
+      setSubmittedBy(submittedByParam);
+    }
+
+    // Track page view for embed signup
+    metaPixel.trackPageView('Embed Signup Page');
+
+    // Listen for submittedBy data from parent window (alternative method)
+    const handleMessage = (event: MessageEvent) => {
+      if (event.data && event.data.type === 'submittedBy') {
+        setSubmittedBy(event.data.value);
+      }
+    };
+
+    window.addEventListener('message', handleMessage);
+
     const resizeObserver = new ResizeObserver(() => {
       const height = document.body.scrollHeight;
       if (window.parent !== window) {
@@ -40,8 +62,17 @@ export default function EmbedSignUpPage() {
 
     return () => {
       resizeObserver.disconnect();
+      window.removeEventListener('message', handleMessage);
     };
   }, []);
+
+  // Track when user starts filling the form
+  useEffect(() => {
+    const hasFormData = formData.firstName || formData.lastName || formData.email;
+    if (hasFormData) {
+      metaPixel.trackFormStart('signup');
+    }
+  }, [formData.firstName, formData.lastName, formData.email]);
 
   // Initial height notification
   useEffect(() => {
@@ -155,8 +186,19 @@ export default function EmbedSignUpPage() {
         formData.password,
         formData.firstName,
         formData.lastName,
-        formData.whatsappNumber
+        formData.whatsappNumber,
+        submittedBy // Pass submittedBy to signUp function
       );
+
+      // 🎯 TRACK SIGNUP CONVERSION TO META
+      metaPixel.trackSignup({
+        email: formData.email,
+        firstName: formData.firstName,
+        lastName: formData.lastName,
+        phone: formData.whatsappNumber
+      });
+
+      console.log('🎯 Meta Pixel: Embed signup conversion tracked for', formData.email);
 
       // Show email verification message
       setEmailSent(true);
@@ -168,6 +210,7 @@ export default function EmbedSignUpPage() {
           email: formData.email,
           firstName: formData.firstName,
           lastName: formData.lastName,
+          submittedBy: submittedBy,
           timestamp: new Date().toISOString()
         }, '*');
       }

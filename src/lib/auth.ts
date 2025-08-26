@@ -20,6 +20,7 @@ export interface UserData {
   createdAt: Date;
   lastLogin?: Date;
   applicationStatus?: 'interested' | 'applied' | 'in_review' | 'qualified' | 'admitted' | 'enrolled' | 'deferred' | 'expired';
+  submittedBy?: string;
 }
 
 // Lead creation function
@@ -28,7 +29,8 @@ const createLeadFromSignup = async (
   firstName: string,
   lastName: string,
   email: string,
-  whatsappNumber: string
+  whatsappNumber: string,
+  submittedBy?: string
 ): Promise<void> => {
   try {
     console.log('📋 Creating lead from student signup...');
@@ -47,15 +49,21 @@ const createLeadFromSignup = async (
       phone: whatsappNumber, // Also include as phone field for consistency
       whatsappNumber: whatsappNumber,
       
+      // Agent/Source attribution
+      submittedBy: submittedBy || "direct", // Track who helped create this account
+      
       // Timeline with initial entry
       timeline: [{
         date: new Date(),
         action: "CREATED",
         status: "INTERESTED",
-        notes: "Lead created from applicant portal signup",
+        notes: submittedBy 
+          ? `Lead created from applicant portal signup - Assisted by: ${submittedBy}`
+          : "Lead created from applicant portal signup",
         metadata: {
           whatsappMessageSent: false,
-          emailNotificationSent: false
+          emailNotificationSent: false,
+          submittedBy: submittedBy || "direct"
         }
       }],
       
@@ -64,7 +72,8 @@ const createLeadFromSignup = async (
         uid: user.uid,
         email: email,
         name: `${firstName || ""} ${lastName || ""}`.trim(),
-        role: "student"
+        role: "student",
+        assistedBy: submittedBy || "direct"
       }
     };
     
@@ -72,7 +81,7 @@ const createLeadFromSignup = async (
     const leadsCollection = collection(db, 'leads');
     const leadDocRef = await addDoc(leadsCollection, leadData);
     
-    console.log('✅ Lead created with ID:', leadDocRef.id);
+    console.log('✅ Lead created with ID:', leadDocRef.id, submittedBy ? `- Assisted by: ${submittedBy}` : '- Direct signup');
     
   } catch (error) {
     console.error('❌ Error creating lead from signup:', error);
@@ -87,10 +96,11 @@ export const signUpWithEmail = async (
   password: string, 
   firstName: string, 
   lastName: string,
-  whatsappNumber: string
+  whatsappNumber: string,
+  submittedBy?: string
 ): Promise<User> => {
   try {
-    console.log('🚀 Creating user with Firebase Auth:', email);
+    console.log('🚀 Creating user with Firebase Auth:', email, submittedBy ? `- Assisted by: ${submittedBy}` : '- Direct signup');
     
     // Create user with Firebase Auth
     const userCredential = await createUserWithEmailAndPassword(auth, email, password);
@@ -106,7 +116,8 @@ export const signUpWithEmail = async (
       lastName,
       whatsappNumber,
       createdAt: new Date(),
-      applicationStatus: 'interested'
+      applicationStatus: 'interested',
+      submittedBy: submittedBy || 'direct'
     };
     
     // Save to Firestore users collection
@@ -115,8 +126,8 @@ export const signUpWithEmail = async (
     
     console.log('✅ User data saved to Firestore');
     
-    // Create lead from signup
-    await createLeadFromSignup(user, firstName, lastName, email, whatsappNumber);
+    // Create lead from signup with submittedBy info
+    await createLeadFromSignup(user, firstName, lastName, email, whatsappNumber, submittedBy);
     
     // Send email verification
     await sendEmailVerification(user);
@@ -161,6 +172,7 @@ export const getUserData = async (uid: string): Promise<UserData | null> => {
         createdAt: userData.createdAt?.toDate() || new Date(),
         lastLogin: userData.lastLogin?.toDate(),
         applicationStatus: userData.applicationStatus || 'interested',
+        submittedBy: userData.submittedBy || 'direct',
       };
       
       return formattedUserData;

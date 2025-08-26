@@ -4,6 +4,7 @@ import { useState, useEffect } from 'react';
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';
 import { useAuth } from '@/contexts/AuthContext';
+import metaPixel from '@/lib/metaPixel';
 
 export default function VerifyEmailPage() {
   const router = useRouter();
@@ -14,6 +15,9 @@ export default function VerifyEmailPage() {
   const [autoChecking, setAutoChecking] = useState(true);
 
   useEffect(() => {
+    // Track page view
+    metaPixel.trackPageView('Email Verification Page');
+
     // If user is not logged in, redirect to login
     if (user === null) {
       router.push('/login');
@@ -22,6 +26,8 @@ export default function VerifyEmailPage() {
 
     // If user is already verified, redirect to dashboard
     if (user && user.emailVerified) {
+      // Track email verification completion
+      metaPixel.trackEmailVerification(user.email || '');
       router.push('/dashboard');
       return;
     }
@@ -38,6 +44,13 @@ export default function VerifyEmailPage() {
           if (isVerified) {
             clearInterval(checkInterval);
             setAutoChecking(false);
+            
+            // 🎯 TRACK EMAIL VERIFICATION TO META
+            if (user?.email) {
+              metaPixel.trackEmailVerification(user.email);
+              console.log('🎯 Meta Pixel: Email verification tracked for', user.email);
+            }
+            
             router.push('/dashboard');
           }
         } catch (error) {

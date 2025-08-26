@@ -1,12 +1,13 @@
 
 'use client';
 
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import Link from 'next/link';
 import Image from 'next/image';
 import PhoneInput from 'react-phone-number-input';
 import WhatsAppVerificationService from '@/lib/whatsapp-verification';
 import { useAuth } from '@/contexts/AuthContext';
+import metaPixel from '@/lib/metaPixel';
 
 export default function SignUpPage() {
   const { signUp } = useAuth();
@@ -25,6 +26,19 @@ export default function SignUpPage() {
   const [errors, setErrors] = useState<Record<string, string>>({});
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [emailSent, setEmailSent] = useState(false);
+
+  // Track page view and form start
+  useEffect(() => {
+    metaPixel.trackPageView('Signup Page');
+  }, []);
+
+  // Track when user starts filling the form
+  useEffect(() => {
+    const hasFormData = formData.firstName || formData.lastName || formData.email;
+    if (hasFormData) {
+      metaPixel.trackFormStart('signup');
+    }
+  }, [formData.firstName, formData.lastName, formData.email]);
 
   const validatePassword = (password: string) => {
     return {
@@ -125,6 +139,16 @@ export default function SignUpPage() {
         formData.lastName,
         formData.whatsappNumber
       );
+
+      // 🎯 TRACK SIGNUP CONVERSION TO META
+      metaPixel.trackSignup({
+        email: formData.email,
+        firstName: formData.firstName,
+        lastName: formData.lastName,
+        phone: formData.whatsappNumber
+      });
+
+      console.log('🎯 Meta Pixel: Signup conversion tracked for', formData.email);
 
       // Show email verification message
       setEmailSent(true);

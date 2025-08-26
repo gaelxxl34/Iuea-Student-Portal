@@ -18,7 +18,7 @@ interface AuthContextType {
   userData: UserData | null;
   loading: boolean;
   signOut: () => Promise<void>;
-  signUp: (email: string, password: string, firstName: string, lastName: string, whatsappNumber: string) => Promise<User>;
+  signUp: (email: string, password: string, firstName: string, lastName: string, whatsappNumber: string, submittedBy?: string) => Promise<User>;
   signInUnverified: (email: string, password: string) => Promise<User>;
   resendVerificationEmail: () => Promise<void>;
   checkEmailVerification: () => Promise<boolean>;
@@ -91,9 +91,10 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
     password: string, 
     firstName: string, 
     lastName: string, 
-    whatsappNumber: string
+    whatsappNumber: string,
+    submittedBy?: string
   ) => {
-    return await signUpWithEmail(email, password, firstName, lastName, whatsappNumber);
+    return await signUpWithEmail(email, password, firstName, lastName, whatsappNumber, submittedBy);
   };
 
   const handleSignInUnverified = async (email: string, password: string) => {
