@@ -1,5 +1,7 @@
 import type { Metadata, Viewport } from "next";
 import { Geist, Geist_Mono } from "next/font/google";
+import Script from "next/script";
+import Image from "next/image";
 import "./globals.css";
 import { AuthProvider } from "@/contexts/AuthContext";
 
@@ -65,9 +67,13 @@ export default function RootLayout({
 }>) {
   return (
     <html lang="en">
-      <head>
+      <body
+        className={`${geistSans.variable} ${geistMono.variable} antialiased`}
+      >
         {/* Google Tag Manager */}
-        <script
+        <Script
+          id="gtm"
+          strategy="afterInteractive"
           dangerouslySetInnerHTML={{
             __html: `(function(w,d,s,l,i){w[l]=w[l]||[];w[l].push({'gtm.start':
 new Date().getTime(),event:'gtm.js'});var f=d.getElementsByTagName(s)[0],
@@ -76,10 +82,11 @@ j=d.createElement(s),dl=l!='dataLayer'?'&l='+l:'';j.async=true;j.src=
 })(window,document,'script','dataLayer','GTM-P6XCP2Z');`,
           }}
         />
-        {/* End Google Tag Manager */}
 
         {/* Meta Pixel Code */}
-        <script
+        <Script
+          id="meta-pixel"
+          strategy="afterInteractive"
           dangerouslySetInnerHTML={{
             __html: `
 !function(f,b,e,v,n,t,s)
@@ -95,20 +102,7 @@ fbq('track', 'PageView');
             `,
           }}
         />
-        <noscript>
-          <img
-            height="1"
-            width="1"
-            style={{ display: 'none' }}
-            src="https://www.facebook.com/tr?id=248693181482452&ev=PageView&noscript=1"
-            alt=""
-          />
-        </noscript>
-        {/* End Meta Pixel Code */}
-      </head>
-      <body
-        className={`${geistSans.variable} ${geistMono.variable} antialiased`}
-      >
+        
         {/* Google Tag Manager (noscript) */}
         <noscript>
           <iframe
@@ -118,7 +112,18 @@ fbq('track', 'PageView');
             style={{ display: 'none', visibility: 'hidden' }}
           />
         </noscript>
-        {/* End Google Tag Manager (noscript) */}
+        
+        {/* Meta Pixel (noscript) */}
+        <noscript>
+          <Image
+            height={1}
+            width={1}
+            style={{ display: 'none' }}
+            src="https://www.facebook.com/tr?id=248693181482452&ev=PageView&noscript=1"
+            alt=""
+          />
+        </noscript>
+        
         <AuthProvider>
           {children}
         </AuthProvider>

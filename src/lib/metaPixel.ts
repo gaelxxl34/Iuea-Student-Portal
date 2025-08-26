@@ -6,24 +6,18 @@
 // Meta Pixel ID - should be the same as your backend
 const META_PIXEL_ID = '248693181482452';
 
-// Event tracking interface
-interface MetaEventData {
-  event_name: string;
-  custom_data?: {
-    content_name?: string;
-    content_category?: string;
-    value?: number;
-    currency?: string;
-    status?: string;
-    lead_event_source?: string;
-    [key: string]: any;
-  };
-  user_data?: {
-    em?: string; // hashed email
-    ph?: string; // hashed phone
-    fn?: string; // hashed first name
-    ln?: string; // hashed last name
-  };
+// Window interface extension for fbq
+declare global {
+  interface Window {
+    fbq?: {
+      (...args: unknown[]): void;
+      callMethod?: (...args: unknown[]) => void;
+      queue?: unknown[];
+      loaded?: boolean;
+      version?: string;
+    };
+    _fbq?: Window['fbq'];
+  }
 }
 
 class MetaPixelService {
@@ -37,27 +31,32 @@ class MetaPixelService {
     if (this.isInitialized || typeof window === 'undefined') return;
 
     try {
-      // Initialize Meta Pixel (fbq)
-      (function(f: any, b: any, e: any, v: any, n?: any, t?: any, s?: any) {
-        if (f.fbq) return;
-        n = f.fbq = function() {
-          n.callMethod ? n.callMethod.apply(n, arguments) : n.queue.push(arguments);
+      // Initialize Meta Pixel using a simpler approach
+      if (!window.fbq) {
+        const script = document.createElement('script');
+        script.async = true;
+        script.src = 'https://connect.facebook.net/en_US/fbevents.js';
+        
+        // Create fbq function
+        window.fbq = function(...args: unknown[]) {
+          if (!window.fbq) return;
+          (window.fbq as { queue?: unknown[] }).queue = (window.fbq as { queue?: unknown[] }).queue || [];
+          ((window.fbq as { queue: unknown[] }).queue as unknown[]).push(args);
         };
-        if (!f._fbq) f._fbq = n;
-        n.push = n;
-        n.loaded = !0;
-        n.version = '2.0';
-        n.queue = [];
-        t = b.createElement(e);
-        t.async = !0;
-        t.src = v;
-        s = b.getElementsByTagName(e)[0];
-        s.parentNode.insertBefore(t, s);
-      })(window, document, 'script', 'https://connect.facebook.net/en_US/fbevents.js');
+        
+        // Set initial properties
+        Object.assign(window.fbq, {
+          loaded: true,
+          version: '2.0',
+          queue: []
+        });
+
+        document.head.appendChild(script);
+      }
 
       // Initialize the pixel
-      (window as any).fbq('init', META_PIXEL_ID);
-      (window as any).fbq('track', 'PageView');
+      window.fbq?.('init', META_PIXEL_ID);
+      window.fbq?.('track', 'PageView');
 
       this.isInitialized = true;
       
@@ -92,27 +91,8 @@ class MetaPixelService {
     this.init();
 
     try {
-      const eventData = {
-        event_name: 'Lead',
-        custom_data: {
-          content_name: 'Student Signup',
-          content_category: 'Education',
-          value: 1, // $1 for INTERESTED status
-          currency: 'USD',
-          status: 'INTERESTED',
-          lead_event_source: 'IUEA Student Portal',
-          source: 'signup_form'
-        },
-        user_data: {
-          em: this.hashData(userData.email),
-          fn: this.hashData(userData.firstName),
-          ln: this.hashData(userData.lastName),
-          ...(userData.phone && { ph: this.hashData(userData.phone) })
-        }
-      };
-
       // Send via Facebook Pixel
-      (window as any).fbq('track', 'Lead', {
+      window.fbq?.('track', 'Lead', {
         content_name: 'Student Signup',
         content_category: 'Education',
         value: 1,
@@ -120,7 +100,7 @@ class MetaPixelService {
       });
 
       // Also track as custom event for better tracking
-      (window as any).fbq('trackCustom', 'StudentSignup', {
+      window.fbq?.('trackCustom', 'StudentSignup', {
         content_name: 'IUEA Student Account Created',
         value: 1,
         currency: 'USD',
@@ -155,7 +135,7 @@ class MetaPixelService {
 
     try {
       // Send via Facebook Pixel
-      (window as any).fbq('track', 'SubmitApplication', {
+      window.fbq?.('track', 'SubmitApplication', {
         content_name: 'Student Application',
         content_category: 'Education',
         value: 3, // $3 for APPLIED status
@@ -163,7 +143,7 @@ class MetaPixelService {
       });
 
       // Also track as custom event
-      (window as any).fbq('trackCustom', 'ApplicationSubmitted', {
+      window.fbq?.('trackCustom', 'ApplicationSubmitted', {
         content_name: `IUEA Application - ${userData.program || 'Unknown Program'}`,
         value: 3,
         currency: 'USD',
@@ -193,10 +173,10 @@ class MetaPixelService {
     this.init();
 
     try {
-      (window as any).fbq('track', 'PageView');
+      window.fbq?.('track', 'PageView');
       
       // Track custom page view for better insights
-      (window as any).fbq('trackCustom', 'PageView', {
+      window.fbq?.('trackCustom', 'PageView', {
         content_name: pageName,
         page_type: 'student_portal'
       });
@@ -218,7 +198,7 @@ class MetaPixelService {
     this.init();
 
     try {
-      (window as any).fbq('track', 'InitiateCheckout', {
+      window.fbq?.('track', 'InitiateCheckout', {
         content_name: formType === 'signup' ? 'Signup Form' : 'Application Form',
         content_category: 'Education'
       });
@@ -240,7 +220,7 @@ class MetaPixelService {
     this.init();
 
     try {
-      (window as any).fbq('trackCustom', 'EmailVerified', {
+      window.fbq?.('trackCustom', 'EmailVerified', {
         content_name: 'Email Verification Complete',
         content_category: 'Education'
       });
