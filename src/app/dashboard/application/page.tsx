@@ -434,6 +434,21 @@ export default function ApplicationPage() {
       setIsSubmitting(true);
       resetProgress();
       
+      // 0. Ensure user is authenticated
+      if (!user) {
+        showError(
+          'Authentication Required',
+          'Please sign in to submit your application.',
+          5000
+        );
+        return;
+      }
+      
+      console.log('👤 Current user for application submission:', {
+        uid: user.uid,
+        email: user.email
+      });
+      
       // Prepare file names for progress tracking
       const fileNames: string[] = [];
       if (files.passportPhoto) fileNames.push(files.passportPhoto.name);
@@ -732,6 +747,21 @@ export default function ApplicationPage() {
     try {
       setIsSubmitting(true);
       
+      // Ensure user is authenticated before proceeding
+      if (!user) {
+        showError(
+          'Authentication Required',
+          'Please sign in to upload documents.',
+          5000
+        );
+        return;
+      }
+      
+      console.log('👤 Current user for document upload:', {
+        uid: user.uid,
+        email: user.email
+      });
+      
       // Use the studentApplicationService to upload documents
       const uploads = [];
       
@@ -776,6 +806,8 @@ export default function ApplicationPage() {
         return;
       }
       
+      console.log(`📤 Starting upload of ${uploads.length} documents...`);
+      
       // Upload documents using studentApplicationService
       const results = await studentApplicationService.uploadMultipleDocuments(uploads);
       
@@ -797,9 +829,10 @@ export default function ApplicationPage() {
       
       if (failedUploads.length > 0) {
         console.warn('Some uploads failed:', failedUploads);
+        const errorDetails = failedUploads.map(f => f.message).join(', ');
         showError(
           'Some Uploads Failed',
-          `${failedUploads.length} document(s) failed to upload. Please try again.`,
+          `${failedUploads.length} document(s) failed to upload: ${errorDetails}. Please try again.`,
           7000
         );
       }
@@ -809,7 +842,7 @@ export default function ApplicationPage() {
       const errorMessage = error instanceof Error ? error.message : 'Unknown error occurred';
       showError(
         'Document Update Failed',
-        `Failed to update documents: ${errorMessage}. Please try again.`,
+        `Failed to update documents: ${errorMessage}. Please check your connection and try again.`,
         7000
       );
     } finally {

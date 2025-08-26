@@ -1,6 +1,7 @@
 /**
  * Meta Pixel Integration for Student Portal
  * Tracks signup and application events for conversion optimization
+ * Uses the same standard mapping as nyota-ai-fusion-backend/src/services/metaConversionsApi.service.js
  */
 
 // Meta Pixel ID - should be the same as your backend
@@ -23,6 +24,38 @@ declare global {
 class MetaPixelService {
   private isInitialized = false;
   private debug = process.env.NODE_ENV === 'development';
+
+  /**
+   * Map application status to Meta event names (matches backend mapping)
+   */
+  private mapStatusToMetaEvent(status: string): string {
+    const statusEventMap: { [key: string]: string } = {
+      INTERESTED: 'Lead', // Standard event
+      APPLIED: 'SubmitApplication', // Standard event - Application submitted
+      IN_REVIEW: 'ApplicationInReview', // Custom event
+      QUALIFIED: 'QualifiedLead', // Standard event - Qualified lead
+      ADMITTED: 'Admitted', // Standard event - Student admitted
+      ENROLLED: 'Purchase', // Standard event - ULTIMATE GOAL!
+    };
+
+    return statusEventMap[status] || 'Lead';
+  }
+
+  /**
+   * Calculate conversion value based on status (matches backend mapping)
+   */
+  private calculateConversionValue(status: string): number {
+    const valueMap: { [key: string]: number } = {
+      INTERESTED: 1,
+      APPLIED: 3,
+      IN_REVIEW: 2,
+      QUALIFIED: 5,
+      ADMITTED: 10,
+      ENROLLED: 15, // Highest value for enrolled students
+    };
+
+    return valueMap[status] || 0;
+  }
 
   /**
    * Initialize Meta Pixel if not already done
@@ -78,7 +111,7 @@ class MetaPixelService {
   }
 
   /**
-   * Track signup conversion (INTERESTED status)
+   * Track signup conversion (INTERESTED status) - matches backend mapping
    */
   trackSignup(userData: {
     email: string;
@@ -91,26 +124,34 @@ class MetaPixelService {
     this.init();
 
     try {
-      // Send via Facebook Pixel
-      window.fbq?.('track', 'Lead', {
-        content_name: 'Student Signup',
+      const status = 'INTERESTED';
+      const eventName = this.mapStatusToMetaEvent(status);
+      const conversionValue = this.calculateConversionValue(status);
+
+      // Send standard Meta event (matches backend structure)
+      window.fbq?.('track', eventName, {
+        content_name: 'Student Application',
         content_category: 'Education',
-        value: 1,
+        value: conversionValue,
         currency: 'USD'
       });
 
-      // Also track as custom event for better tracking
+      // Also track as custom event for additional insights
       window.fbq?.('trackCustom', 'StudentSignup', {
-        content_name: 'IUEA Student Account Created',
-        value: 1,
+        content_name: 'Student Application',
+        content_category: 'Education',
+        value: conversionValue,
         currency: 'USD',
-        status: 'INTERESTED'
+        status: status,
+        event_source: 'student_portal',
+        lead_event_source: 'Nyota Student Portal'
       });
 
       if (this.debug) {
         console.log('🎯 Meta Pixel: Signup conversion tracked', {
-          event: 'Lead',
-          value: 1,
+          event: eventName,
+          value: conversionValue,
+          status: status,
           user: userData.email
         });
       }
@@ -120,7 +161,7 @@ class MetaPixelService {
   }
 
   /**
-   * Track application submission (APPLIED status)
+   * Track application submission (APPLIED status) - matches backend mapping
    */
   trackApplicationSubmission(userData: {
     email: string;
@@ -134,27 +175,35 @@ class MetaPixelService {
     this.init();
 
     try {
-      // Send via Facebook Pixel
-      window.fbq?.('track', 'SubmitApplication', {
+      const status = 'APPLIED';
+      const eventName = this.mapStatusToMetaEvent(status);
+      const conversionValue = this.calculateConversionValue(status);
+
+      // Send standard Meta event (matches backend structure)
+      window.fbq?.('track', eventName, {
         content_name: 'Student Application',
         content_category: 'Education',
-        value: 3, // $3 for APPLIED status
+        value: conversionValue,
         currency: 'USD'
       });
 
-      // Also track as custom event
+      // Also track as custom event for additional insights
       window.fbq?.('trackCustom', 'ApplicationSubmitted', {
-        content_name: `IUEA Application - ${userData.program || 'Unknown Program'}`,
-        value: 3,
+        content_name: 'Student Application',
+        content_category: 'Education',
+        value: conversionValue,
         currency: 'USD',
-        status: 'APPLIED',
-        program: userData.program
+        status: status,
+        program: userData.program,
+        event_source: 'student_portal',
+        lead_event_source: 'Nyota Student Portal'
       });
 
       if (this.debug) {
         console.log('🎯 Meta Pixel: Application submission tracked', {
-          event: 'SubmitApplication',
-          value: 3,
+          event: eventName,
+          value: conversionValue,
+          status: status,
           user: userData.email,
           program: userData.program
         });
@@ -165,7 +214,120 @@ class MetaPixelService {
   }
 
   /**
-   * Track page views for specific pages
+   * Generic method to track any status conversion (matches backend structure)
+   */
+  trackStatusConversion(
+    status: 'INTERESTED' | 'APPLIED' | 'IN_REVIEW' | 'QUALIFIED' | 'ADMITTED' | 'ENROLLED',
+    userData: {
+      email: string;
+      firstName: string;
+      lastName: string;
+      phone?: string;
+      program?: string;
+      leadId?: string;
+      applicationId?: string;
+    }
+  ) {
+    if (typeof window === 'undefined') return;
+
+    this.init();
+
+    try {
+      const eventName = this.mapStatusToMetaEvent(status);
+      const conversionValue = this.calculateConversionValue(status);
+
+      // Send standard Meta event (matches backend structure)
+      window.fbq?.('track', eventName, {
+        content_name: 'Student Application',
+        content_category: 'Education',
+        value: conversionValue,
+        currency: 'USD'
+      });
+
+      // Also track as custom event for detailed insights
+      window.fbq?.('trackCustom', `Status${status}`, {
+        content_name: 'Student Application',
+        content_category: 'Education',
+        value: conversionValue,
+        currency: 'USD',
+        status: status,
+        program: userData.program,
+        event_source: 'student_portal',
+        lead_event_source: 'Nyota Student Portal',
+        application_id: userData.applicationId || userData.leadId
+      });
+
+      if (this.debug) {
+        console.log('🎯 Meta Pixel: Status conversion tracked', {
+          event: eventName,
+          value: conversionValue,
+          status: status,
+          user: userData.email,
+          program: userData.program
+        });
+      }
+    } catch (error) {
+      console.error('❌ Failed to track status conversion:', error);
+    }
+  }
+
+  /**
+   * Track enrollment conversion (ENROLLED status - highest value event)
+   */
+  trackEnrollmentConversion(userData: {
+    email: string;
+    firstName: string;
+    lastName: string;
+    phone?: string;
+    program?: string;
+    applicationId?: string;
+  }) {
+    if (typeof window === 'undefined') return;
+
+    this.init();
+
+    try {
+      const status = 'ENROLLED';
+      const eventName = this.mapStatusToMetaEvent(status); // This will be 'Purchase'
+      const conversionValue = this.calculateConversionValue(status); // This will be 15
+
+      // Send Purchase event (highest value conversion)
+      window.fbq?.('track', eventName, {
+        content_name: 'Student Application',
+        content_category: 'Education',
+        value: conversionValue,
+        currency: 'USD'
+      });
+
+      // Also track as custom event
+      window.fbq?.('trackCustom', 'StudentEnrolled', {
+        content_name: 'Student Application',
+        content_category: 'Education',
+        value: conversionValue,
+        currency: 'USD',
+        status: status,
+        program: userData.program,
+        event_source: 'student_portal',
+        lead_event_source: 'Nyota Student Portal',
+        application_id: userData.applicationId
+      });
+
+      if (this.debug) {
+        console.log('🎯 Meta Pixel: ENROLLMENT conversion tracked - HIGHEST VALUE EVENT!', {
+          event: eventName,
+          value: conversionValue,
+          status: status,
+          user: userData.email,
+          program: userData.program
+        });
+      }
+    } catch (error) {
+      console.error('❌ Failed to track enrollment conversion:', error);
+    }
+  }
+
+  /**
+   * Track page views for specific pages (enhanced with consistent structure)
    */
   trackPageView(pageName: string) {
     if (typeof window === 'undefined') return;
@@ -175,10 +337,13 @@ class MetaPixelService {
     try {
       window.fbq?.('track', 'PageView');
       
-      // Track custom page view for better insights
+      // Track custom page view for better insights (matches backend structure)
       window.fbq?.('trackCustom', 'PageView', {
         content_name: pageName,
-        page_type: 'student_portal'
+        content_category: 'Education',
+        page_type: 'student_portal',
+        event_source: 'student_portal',
+        lead_event_source: 'Nyota Student Portal'
       });
 
       if (this.debug) {
@@ -190,7 +355,7 @@ class MetaPixelService {
   }
 
   /**
-   * Track form starts (when users begin filling forms)
+   * Track form starts (when users begin filling forms) - enhanced mapping
    */
   trackFormStart(formType: 'signup' | 'application') {
     if (typeof window === 'undefined') return;
@@ -199,8 +364,10 @@ class MetaPixelService {
 
     try {
       window.fbq?.('track', 'InitiateCheckout', {
-        content_name: formType === 'signup' ? 'Signup Form' : 'Application Form',
-        content_category: 'Education'
+        content_name: formType === 'signup' ? 'Student Signup Form' : 'Student Application Form',
+        content_category: 'Education',
+        event_source: 'student_portal',
+        lead_event_source: 'Nyota Student Portal'
       });
 
       if (this.debug) {
@@ -212,7 +379,7 @@ class MetaPixelService {
   }
 
   /**
-   * Track email verification
+   * Track email verification (enhanced with consistent structure)
    */
   trackEmailVerification(email: string) {
     if (typeof window === 'undefined') return;
@@ -222,7 +389,9 @@ class MetaPixelService {
     try {
       window.fbq?.('trackCustom', 'EmailVerified', {
         content_name: 'Email Verification Complete',
-        content_category: 'Education'
+        content_category: 'Education',
+        event_source: 'student_portal',
+        lead_event_source: 'Nyota Student Portal'
       });
 
       if (this.debug) {
