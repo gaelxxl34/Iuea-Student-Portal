@@ -66,13 +66,7 @@ export default function ApplicationPage() {
   const { toasts, removeToast, showSuccess, showError, showWarning } = useToast();
   const { progress, startProgress, updateFileProgress, updateStage, reset: resetProgress } = useUploadProgress();
   
-  // Application form sections - matching frontend structure exactly
-  const formSections = [
-    { id: 'personal', name: 'Personal Details', completed: false },
-    { id: 'program', name: 'Program Selection', completed: false },
-    { id: 'additional', name: 'Additional Information', completed: false },
-  ];
-  
+  // State declarations first
   const [activeSection, setActiveSection] = useState('personal');
   const [isEditing, setIsEditing] = useState(true);
   const [isSubmitting, setIsSubmitting] = useState(false);
@@ -92,7 +86,12 @@ export default function ApplicationPage() {
     identificationDocuments: [],
   });
   
-  // Application data state
+  // Country search state
+  const [countrySearchQuery, setCountrySearchQuery] = useState('');
+  const [isCountryDropdownOpen, setIsCountryDropdownOpen] = useState(false);
+  const [filteredCountries, setFilteredCountries] = useState<string[]>([]);
+  
+  // Application data state - initialized first so validation functions can access it
   const [applicationData, setApplicationData] = useState<FormData>(() => {
     // Initialize with user data if available
     const initialData: FormData = {
@@ -120,6 +119,113 @@ export default function ApplicationPage() {
     console.log('🎯 Initializing application data:', initialData);
     return initialData;
   });
+
+  // Section-specific validation functions (moved after state to avoid hoisting issues)
+  const validatePersonalSection = (formData: FormData): { isValid: boolean; errors: string[] } => {
+    const errors: string[] = [];
+    
+    if (!formData.firstName.trim()) errors.push('First name is required');
+    if (!formData.lastName.trim()) errors.push('Last name is required');
+    if (!formData.email.trim()) errors.push('Email is required');
+    if (!formData.phone.trim()) errors.push('Phone number is required');
+    if (!formData.countryOfBirth.trim()) errors.push('Country of birth is required');
+    if (!formData.gender.trim()) errors.push('Gender is required');
+    if (!formData.postalAddress.trim()) errors.push('Physical address is required');
+    
+    // Email validation
+    if (formData.email && !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(formData.email)) {
+      errors.push('Please enter a valid email address');
+    }
+    
+    // Phone number validation
+    if (formData.phone && !isValidPhoneNumber(formData.phone)) {
+      errors.push('Please enter a valid phone number with country code');
+    }
+    
+    return {
+      isValid: errors.length === 0,
+      errors
+    };
+  };
+
+  const validateProgramSection = (formData: FormData): { isValid: boolean; errors: string[] } => {
+    const errors: string[] = [];
+    
+    if (!formData.program.trim()) errors.push('Program selection is required');
+    if (!formData.modeOfStudy.trim()) errors.push('Mode of study is required');
+    if (!formData.intake.trim()) errors.push('Intake selection is required');
+    
+    return {
+      isValid: errors.length === 0,
+      errors
+    };
+  };
+
+  const validateAdditionalSection = (formData: FormData): { isValid: boolean; errors: string[] } => {
+    const errors: string[] = [];
+    
+    if (!formData.howDidYouHear.trim()) errors.push('Please tell us how you heard about the university');
+    
+    // Sponsor details are now required
+    if (!formData.sponsorTelephone.trim()) errors.push('Sponsor telephone is required');
+    if (!formData.sponsorEmail.trim()) errors.push('Sponsor email is required');
+    
+    // Sponsor phone validation (when provided)
+    if (formData.sponsorTelephone && !isValidPhoneNumber(formData.sponsorTelephone)) {
+      errors.push('Please enter a valid sponsor phone number with country code');
+    }
+    
+    // Sponsor email validation (when provided)
+    if (formData.sponsorEmail && !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(formData.sponsorEmail)) {
+      errors.push('Please enter a valid sponsor email address');
+    }
+    
+    return {
+      isValid: errors.length === 0,
+      errors
+    };
+  };
+  
+  // Function to check if a section is completed (now applicationData is available)
+  const isSectionCompleted = (sectionId: string): boolean => {
+    switch (sectionId) {
+      case 'personal':
+        return validatePersonalSection(applicationData).isValid;
+      case 'program':
+        return validateProgramSection(applicationData).isValid;
+      case 'additional':
+        return validateAdditionalSection(applicationData).isValid;
+      default:
+        return false;
+    }
+  };
+
+  // Function to check if a section can be accessed
+  const canAccessSection = (sectionId: string): boolean => {
+    const sections = ['personal', 'program', 'additional'];
+    const currentIndex = sections.findIndex(section => section === activeSection);
+    const targetIndex = sections.findIndex(section => section === sectionId);
+    
+    // Always allow access to the current section and previous sections
+    if (targetIndex <= currentIndex) return true;
+    
+    // For next sections, check if previous sections are completed
+    for (let i = 0; i < targetIndex; i++) {
+      const section = sections[i];
+      if (!isSectionCompleted(section)) {
+        return false;
+      }
+    }
+    
+    return true;
+  };
+
+  // Application form sections - with dynamic completion status (now applicationData is available)
+  const formSections = [
+    { id: 'personal', name: 'Personal Details', completed: isSectionCompleted('personal') },
+    { id: 'program', name: 'Program Selection', completed: isSectionCompleted('program') },
+    { id: 'additional', name: 'Additional Information', completed: isSectionCompleted('additional') },
+  ];
 
   // Pre-populate form with user data when available
   useEffect(() => {
@@ -217,6 +323,23 @@ export default function ApplicationPage() {
       phone: applicationData.phone 
     });
   }, [user, userData, applicationData.firstName, applicationData.lastName, applicationData.email, applicationData.phone]);
+
+  // Filter countries based on search query
+  useEffect(() => {
+    if (countrySearchQuery.trim() === '') {
+      setFilteredCountries(countryList);
+    } else {
+      const filtered = countryList.filter(country =>
+        country.toLowerCase().includes(countrySearchQuery.toLowerCase())
+      );
+      setFilteredCountries(filtered);
+    }
+  }, [countrySearchQuery]);
+
+  // Initialize filtered countries
+  useEffect(() => {
+    setFilteredCountries(countryList);
+  }, []);
 
   // Helper function to refresh user data and re-populate form
   const refreshUserData = async () => {
@@ -331,55 +454,60 @@ export default function ApplicationPage() {
     }
   };
 
-  // Handler for section navigation
+  // Handler for section navigation with validation
   const handleSectionClick = (sectionId: string) => {
+    // Don't allow navigation if trying to go to a section that comes after the current one
+    // without completing the current section first
+    const currentIndex = formSections.findIndex(section => section.id === activeSection);
+    const targetIndex = formSections.findIndex(section => section.id === sectionId);
+    
+    // Allow going to previous sections or the same section
+    if (targetIndex <= currentIndex) {
+      setActiveSection(sectionId);
+      return;
+    }
+    
+    // For moving forward, validate the current section first
+    let validation = { isValid: true, errors: [] as string[] };
+    
+    if (activeSection === 'personal') {
+      validation = validatePersonalSection(applicationData);
+    } else if (activeSection === 'program') {
+      validation = validateProgramSection(applicationData);
+    } else if (activeSection === 'additional') {
+      validation = validateAdditionalSection(applicationData);
+    }
+    
+    if (!validation.isValid) {
+      // Show validation errors
+      const errorMessage = validation.errors.join('\n');
+      showError(
+        'Incomplete Section',
+        `Please complete all required fields in the current section before proceeding:\n\n${errorMessage}`,
+        8000
+      );
+      return;
+    }
+    
+    // If validation passes, allow navigation
     setActiveSection(sectionId);
   };
 
-  // Validation function
+  // Validation function for final submission
   const validateFormData = (formData: FormData): { isValid: boolean; errors: string[] } => {
-    const errors: string[] = [];
+    const personalValidation = validatePersonalSection(formData);
+    const programValidation = validateProgramSection(formData);
+    const additionalValidation = validateAdditionalSection(formData);
     
-    // Required personal fields
-    if (!formData.firstName.trim()) errors.push('First name is required');
-    if (!formData.lastName.trim()) errors.push('Last name is required');
-    if (!formData.email.trim()) errors.push('Email is required');
-    if (!formData.phone.trim()) errors.push('Phone number is required');
-    if (!formData.countryOfBirth.trim()) errors.push('Country of birth is required');
-    if (!formData.gender.trim()) errors.push('Gender is required');
-    if (!formData.postalAddress.trim()) errors.push('Physical address is required');
-    
-    // Required academic fields
-    if (!formData.program.trim()) errors.push('Program selection is required');
-    if (!formData.modeOfStudy.trim()) errors.push('Mode of study is required');
-    if (!formData.intake.trim()) errors.push('Intake selection is required');
-    
-    // Required additional field
-    if (!formData.howDidYouHear.trim()) errors.push('Please tell us how you heard about the university');
-    
-    // Email validation
-    if (formData.email && !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(formData.email)) {
-      errors.push('Please enter a valid email address');
-    }
-    
-    // Phone number validation
-    if (formData.phone && !isValidPhoneNumber(formData.phone)) {
-      errors.push('Please enter a valid phone number with country code');
-    }
-    
-    // Sponsor phone validation (if provided)
-    if (formData.sponsorTelephone && !isValidPhoneNumber(formData.sponsorTelephone)) {
-      errors.push('Please enter a valid sponsor phone number with country code');
-    }
-    
-    // Sponsor email validation (if provided)
-    if (formData.sponsorEmail && !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(formData.sponsorEmail)) {
-      errors.push('Please enter a valid sponsor email address');
-    }
+    const allErrors = [
+      ...personalValidation.errors,
+      ...programValidation.errors,
+      ...additionalValidation.errors
+    ];
     
     return {
-      isValid: errors.length === 0,
-      errors
+      isValid: allErrors.length === 0,
+      errors: allErrors
     };
   };
 
@@ -405,7 +533,7 @@ export default function ApplicationPage() {
       );
       
       const additionalErrors = validation.errors.filter(error => 
-        error.includes('how you heard')
+        error.includes('how you heard') || error.includes('Sponsor')
       );
       
       let errorMessage = 'Please complete the following required fields:\n\n';
@@ -623,7 +751,7 @@ export default function ApplicationPage() {
       );
       
       const additionalErrors = validation.errors.filter(error => 
-        error.includes('how you heard')
+        error.includes('how you heard') || error.includes('Sponsor')
       );
       
       let errorMessage = 'Please complete the following required fields:\n\n';
@@ -897,29 +1025,42 @@ export default function ApplicationPage() {
     }
   };
 
-  // Check if sections are completed
-  const isPersonalDetailsComplete = () => {
-    return applicationData.firstName && 
-           applicationData.lastName && 
-           applicationData.email && 
-           applicationData.phone && 
-           applicationData.countryOfBirth && 
-           applicationData.gender && 
-           applicationData.postalAddress &&
-           files.passportPhoto;
+  // Country dropdown handlers
+  const handleCountrySelect = (country: string) => {
+    handleInputChange('countryOfBirth', country);
+    setIsCountryDropdownOpen(false);
+    setCountrySearchQuery('');
   };
 
-  const isProgramSelectionComplete = () => {
-    return applicationData.program && 
-           applicationData.modeOfStudy && 
-           applicationData.intake &&
-           files.academicDocuments.length > 0 &&
-           files.identificationDocuments.length > 0;
+  const handleCountrySearchChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    setCountrySearchQuery(e.target.value);
   };
 
-  const isAdditionalInfoComplete = () => {
-    return applicationData.howDidYouHear;
+  const toggleCountryDropdown = () => {
+    setIsCountryDropdownOpen(!isCountryDropdownOpen);
+    if (!isCountryDropdownOpen) {
+      setCountrySearchQuery('');
+    }
   };
+
+  // Close dropdown when clicking outside
+  useEffect(() => {
+    const handleClickOutside = (event: MouseEvent) => {
+      const target = event.target as Element;
+      if (!target.closest('.country-dropdown-container')) {
+        setIsCountryDropdownOpen(false);
+        setCountrySearchQuery('');
+      }
+    };
+
+    if (isCountryDropdownOpen) {
+      document.addEventListener('mousedown', handleClickOutside);
+    }
+
+    return () => {
+      document.removeEventListener('mousedown', handleClickOutside);
+    };
+  }, [isCountryDropdownOpen]);
 
   // Program data organized by faculty, mode, and intake
   const programData = {
@@ -1096,7 +1237,7 @@ export default function ApplicationPage() {
 
   // Get form completion percentage
   const getFormCompletionPercentage = () => {
-    const totalFields = 11; // Total required fields
+    const totalFields = 13; // Total required fields (added sponsor fields)
     let completedFields = 0;
     
     if (applicationData.firstName.trim()) completedFields++;
@@ -1110,6 +1251,8 @@ export default function ApplicationPage() {
     if (applicationData.modeOfStudy.trim()) completedFields++;
     if (applicationData.intake.trim()) completedFields++;
     if (applicationData.howDidYouHear.trim()) completedFields++;
+    if (applicationData.sponsorTelephone.trim()) completedFields++; // Added sponsor phone
+    if (applicationData.sponsorEmail.trim()) completedFields++; // Added sponsor email
     
     const percentage = Math.round((completedFields / totalFields) * 100);
     // Ensure percentage never exceeds 100% or goes below 0%
@@ -1812,9 +1955,8 @@ export default function ApplicationPage() {
       <div className="bg-white rounded-lg p-3 md:p-4 border border-slate-200 mb-6">
         <div className="grid grid-cols-1 sm:grid-cols-3 gap-4 md:gap-6">
           {formSections.map((section, index) => {
-            const isCompleted = index === 0 ? isPersonalDetailsComplete() : 
-                               index === 1 ? isProgramSelectionComplete() : 
-                               isAdditionalInfoComplete();
+            const isCompleted = formSections[index].completed;
+            const canAccess = canAccessSection(section.id);
             
             return (
               <div 
@@ -1828,11 +1970,15 @@ export default function ApplicationPage() {
                         ? 'bg-red-800 text-white' 
                         : activeSection === section.id
                         ? 'bg-red-800/20 border-2 border-red-800 text-red-800'
-                        : 'bg-slate-200 text-slate-800/50'
+                        : canAccess
+                        ? 'bg-slate-200 text-slate-800/50'
+                        : 'bg-gray-100 text-gray-400 border border-gray-200'
                     }`}
                   >
                     {isCompleted ? (
                       <i className="ri-check-line"></i>
+                    ) : !canAccess ? (
+                      <i className="ri-lock-line"></i>
                     ) : (
                       index + 1
                     )}
@@ -1847,7 +1993,11 @@ export default function ApplicationPage() {
                 </div>
                 <span 
                   className={`text-xs md:text-sm text-center ${
-                    activeSection === section.id ? 'text-red-800 font-medium' : 'text-slate-800/70'
+                    activeSection === section.id 
+                      ? 'text-red-800 font-medium' 
+                      : canAccess
+                      ? 'text-slate-800/70'
+                      : 'text-gray-400'
                   }`}
                 >
                   {section.name}
@@ -1868,34 +2018,49 @@ export default function ApplicationPage() {
             </div>
             <div>
               {formSections.map((section, index) => {
-                const isCompleted = index === 0 ? isPersonalDetailsComplete() : 
-                                   index === 1 ? isProgramSelectionComplete() : 
-                                   isAdditionalInfoComplete();
+                const isCompleted = formSections[index].completed;
                 
                 return (
                   <button
                     key={section.id}
                     onClick={() => handleSectionClick(section.id)}
-                    className={`w-full text-left px-3 md:px-4 py-2 md:py-3 flex items-center justify-between border-b border-slate-200 last:border-b-0 ${
+                    disabled={!canAccessSection(section.id)}
+                    className={`w-full text-left px-3 md:px-4 py-2 md:py-3 flex items-center justify-between border-b border-slate-200 last:border-b-0 transition-colors ${
                       activeSection === section.id
                         ? 'bg-red-800/5 border-l-4 border-l-[#780000]'
-                        : ''
+                        : canAccessSection(section.id)
+                        ? 'hover:bg-slate-50'
+                        : 'opacity-50 cursor-not-allowed bg-gray-50'
                     }`}
                   >
                     <div className="flex items-center">
                       <span 
                         className={`text-xs md:text-sm ${
-                          activeSection === section.id ? 'text-red-800 font-medium' : ''
+                          activeSection === section.id 
+                            ? 'text-red-800 font-medium' 
+                            : canAccessSection(section.id)
+                            ? 'text-slate-700'
+                            : 'text-slate-400'
                         }`}
                       >
                         {section.name}
                       </span>
+                      {!canAccessSection(section.id) && (
+                        <i className="ri-lock-line text-slate-400 text-xs ml-1"></i>
+                      )}
                     </div>
-                    {isCompleted && (
-                      <div className="h-4 w-4 md:h-5 md:w-5 rounded-full bg-green-100 flex items-center justify-center">
-                        <i className="ri-check-line text-green-600 text-xs"></i>
-                      </div>
-                    )}
+                    <div className="flex items-center gap-1">
+                      {isCompleted && (
+                        <div className="h-4 w-4 md:h-5 md:w-5 rounded-full bg-green-100 flex items-center justify-center">
+                          <i className="ri-check-line text-green-600 text-xs"></i>
+                        </div>
+                      )}
+                      {!canAccessSection(section.id) && !isCompleted && (
+                        <div className="h-4 w-4 md:h-5 md:w-5 rounded-full bg-gray-100 flex items-center justify-center">
+                          <i className="ri-lock-line text-gray-400 text-xs"></i>
+                        </div>
+                      )}
+                    </div>
                   </button>
                 );
               })}
@@ -1959,11 +2124,11 @@ export default function ApplicationPage() {
               <div className="flex flex-col sm:flex-row sm:justify-between sm:items-center mb-4 gap-2">
                 <h2 className="text-base md:text-lg font-semibold text-slate-800">Personal Details</h2>
                 <span className={`text-xs px-2 py-1 rounded-full w-fit ${
-                  isPersonalDetailsComplete() 
+                  isSectionCompleted('personal') 
                     ? 'bg-green-100 text-green-700' 
                     : 'bg-yellow-100 text-yellow-700'
                 }`}>
-                  {isPersonalDetailsComplete() ? 'Completed' : 'In Progress'}
+                  {isSectionCompleted('personal') ? 'Completed' : 'In Progress'}
                 </span>
               </div>
               
@@ -2112,18 +2277,57 @@ export default function ApplicationPage() {
                       Country of Birth <span className="text-red-600">*</span>
                     </label>
                     {isEditing ? (
-                      <select
-                        value={applicationData.countryOfBirth}
-                        onChange={(e) => handleInputChange('countryOfBirth', e.target.value)}
-                        className="w-full px-4 py-3 rounded-lg border-2 border-slate-200 text-base bg-white"
-                      >
-                        <option value="">Select Country</option>
-                        {countryList.map((country) => (
-                          <option key={country} value={country}>
-                            {country}
-                          </option>
-                        ))}
-                      </select>
+                      <div className="relative country-dropdown-container">
+                        <div
+                          onClick={toggleCountryDropdown}
+                          className="w-full px-4 py-3 rounded-lg border-2 border-slate-200 text-base bg-white cursor-pointer flex justify-between items-center"
+                        >
+                          <span className={applicationData.countryOfBirth ? 'text-black' : 'text-gray-500'}>
+                            {applicationData.countryOfBirth || 'Select Country'}
+                          </span>
+                          <i className={`ri-arrow-${isCountryDropdownOpen ? 'up' : 'down'}-s-line text-gray-600`}></i>
+                        </div>
+                        
+                        {isCountryDropdownOpen && (
+                          <div className="absolute top-full left-0 right-0 z-50 bg-white border-2 border-slate-200 rounded-lg shadow-lg mt-1 max-h-64 overflow-hidden">
+                            {/* Search input */}
+                            <div className="p-3 border-b border-slate-200">
+                              <div className="relative">
+                                <i className="ri-search-line absolute left-3 top-1/2 transform -translate-y-1/2 text-gray-400"></i>
+                                <input
+                                  type="text"
+                                  placeholder="Search countries..."
+                                  value={countrySearchQuery}
+                                  onChange={handleCountrySearchChange}
+                                  className="w-full pl-10 pr-4 py-2 border border-slate-200 rounded-lg text-sm focus:outline-none focus:border-slate-400"
+                                  autoFocus
+                                />
+                              </div>
+                            </div>
+                            
+                            {/* Country list */}
+                            <div className="max-h-48 overflow-y-auto">
+                              {filteredCountries.length > 0 ? (
+                                filteredCountries.map((country) => (
+                                  <div
+                                    key={country}
+                                    onClick={() => handleCountrySelect(country)}
+                                    className={`px-4 py-2 cursor-pointer hover:bg-slate-100 text-sm ${
+                                      applicationData.countryOfBirth === country ? 'bg-slate-100 font-medium' : ''
+                                    }`}
+                                  >
+                                    {country}
+                                  </div>
+                                ))
+                              ) : (
+                                <div className="px-4 py-3 text-sm text-gray-500 text-center">
+                                  No countries found
+                                </div>
+                              )}
+                            </div>
+                          </div>
+                        )}
+                      </div>
                     ) : (
                       <input
                         type="text"
@@ -2223,7 +2427,13 @@ export default function ApplicationPage() {
               <div className="mt-6 flex flex-col sm:flex-row sm:justify-between gap-3">
                 <button
                   onClick={() => handleSectionClick('program')}
-                  className="px-4 py-2 text-sm bg-red-800 text-white rounded-lg hover:bg-[#600000] transition-colors"
+                  disabled={!isSectionCompleted('personal')}
+                  className={`px-4 py-2 text-sm rounded-lg transition-colors ${
+                    isSectionCompleted('personal')
+                      ? 'bg-red-800 text-white hover:bg-[#600000]'
+                      : 'bg-gray-300 text-gray-500 cursor-not-allowed'
+                  }`}
+                  title={!isSectionCompleted('personal') ? 'Please complete all required fields in the Personal Details section first' : ''}
                 >
                   Next: Program Selection
                   <i className="ri-arrow-right-line ml-1"></i>
@@ -2239,7 +2449,7 @@ export default function ApplicationPage() {
                   }
                   disabled={
                     isSubmitting || 
-                    (!submittedApplication && (!isPersonalDetailsComplete() || !isProgramSelectionComplete() || !isAdditionalInfoComplete()))
+                    (!submittedApplication && (!isSectionCompleted('personal') || !isSectionCompleted('program') || !isSectionCompleted('additional')))
                   }
                   className="px-4 py-2 text-sm bg-green-600 text-white rounded-lg hover:bg-green-700 transition-colors disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center"
                 >
@@ -2285,11 +2495,11 @@ export default function ApplicationPage() {
               <div className="flex flex-col sm:flex-row sm:justify-between sm:items-center mb-4 gap-2">
                 <h2 className="text-base md:text-lg font-semibold text-slate-800">Program Selection</h2>
                 <span className={`text-xs px-2 py-1 rounded-full w-fit ${
-                  isProgramSelectionComplete() 
+                  isSectionCompleted('program') 
                     ? 'bg-green-100 text-green-700' 
                     : 'bg-yellow-100 text-yellow-700'
                 }`}>
-                  {isProgramSelectionComplete() ? 'Completed' : 'In Progress'}
+                  {isSectionCompleted('program') ? 'Completed' : 'In Progress'}
                 </span>
               </div>
               
@@ -2587,7 +2797,7 @@ export default function ApplicationPage() {
                     }
                     disabled={
                       isSubmitting || 
-                      (!submittedApplication && (!isPersonalDetailsComplete() || !isProgramSelectionComplete() || !isAdditionalInfoComplete()))
+                      (!submittedApplication && (!isSectionCompleted('personal') || !isSectionCompleted('program') || !isSectionCompleted('additional')))
                     }
                     className="px-4 py-2 text-sm bg-green-600 text-white rounded-lg hover:bg-green-700 transition-colors disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center"
                   >
@@ -2630,11 +2840,11 @@ export default function ApplicationPage() {
               <div className="flex flex-col sm:flex-row sm:justify-between sm:items-center mb-4 gap-2">
                 <h2 className="text-base md:text-lg font-semibold text-slate-800">Additional Information</h2>
                 <span className={`text-xs px-2 py-1 rounded-full w-fit ${
-                  isAdditionalInfoComplete() 
+                  isSectionCompleted('additional') 
                     ? 'bg-green-100 text-green-700' 
                     : 'bg-yellow-100 text-yellow-700'
                 }`}>
-                  {isAdditionalInfoComplete() ? 'Completed' : 'In Progress'}
+                  {isSectionCompleted('additional') ? 'Completed' : 'In Progress'}
                 </span>
               </div>
               
@@ -2775,7 +2985,7 @@ export default function ApplicationPage() {
                   }
                   disabled={
                     isSubmitting || 
-                    (!submittedApplication && (!isPersonalDetailsComplete() || !isProgramSelectionComplete() || !isAdditionalInfoComplete()))
+                    (!submittedApplication && (!isSectionCompleted('personal') || !isSectionCompleted('program') || !isSectionCompleted('additional')))
                   }
                   className="px-4 py-2 text-sm bg-green-600 text-white rounded-lg hover:bg-green-700 transition-colors disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center"
                 >
