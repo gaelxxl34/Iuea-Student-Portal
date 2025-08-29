@@ -16,7 +16,7 @@ interface ApplicationNotificationData {
 interface NotificationResponse {
   success: boolean;
   message: string;
-  data?: any;
+  data?: unknown;
   error?: string;
 }
 
@@ -181,4 +181,5 @@ class ApplicationNotificationService {
   }
 }
 
-export default new ApplicationNotificationService();
+const applicationNotificationService = new ApplicationNotificationService();
+export default applicationNotificationService;

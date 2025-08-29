@@ -1,6 +1,6 @@
 'use client';
 
-import { useEffect, useState } from 'react';
+import { useEffect, useState, useCallback } from 'react';
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';
 import { useAuth } from '@/contexts/AuthContext';
@@ -131,7 +131,7 @@ export default function Dashboard() {
     };
 
     checkAuthAndVerification();
-  }, [user, loading, userData, router, refreshUser]);
+  }, [user, loading, userData, router, refreshUser, sendWelcomeMessages]);
 
   // Load application data when user is available
   useEffect(() => {

@@ -169,4 +169,5 @@ class WelcomeApiService {
   }
 }
 
-export default new WelcomeApiService();
+const welcomeApiService = new WelcomeApiService();
+export default welcomeApiService;

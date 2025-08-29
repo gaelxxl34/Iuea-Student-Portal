@@ -334,12 +334,12 @@ export default function ApplicationPage() {
       );
       setFilteredCountries(filtered);
     }
-  }, [countrySearchQuery]);
+  }, [countrySearchQuery]); // eslint-disable-line react-hooks/exhaustive-deps
 
   // Initialize filtered countries
   useEffect(() => {
     setFilteredCountries(countryList);
-  }, []);
+  }, []); // eslint-disable-line react-hooks/exhaustive-deps
 
   // Helper function to refresh user data and re-populate form
   const refreshUserData = async () => {
