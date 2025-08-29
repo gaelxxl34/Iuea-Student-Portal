@@ -27,8 +27,14 @@ export const FileSizePreview: React.FC<FileSizePreviewProps> = ({
   React.useEffect(() => {
     const allFiles: File[] = [];
     if (files.passportPhoto) allFiles.push(files.passportPhoto);
-    allFiles.push(...files.academicDocuments);
-    allFiles.push(...files.identificationDocuments);
+    
+    // Safely handle arrays that might be undefined
+    if (Array.isArray(files.academicDocuments)) {
+      allFiles.push(...files.academicDocuments);
+    }
+    if (Array.isArray(files.identificationDocuments)) {
+      allFiles.push(...files.identificationDocuments);
+    }
 
     if (allFiles.length > 0) {
       const estimate = fileCompressionService.estimateCompressionSavings(allFiles);
@@ -68,19 +74,25 @@ export const FileSizePreview: React.FC<FileSizePreviewProps> = ({
       allFiles.push({ file: files.passportPhoto, type: 'Passport Photo' });
     }
     
-    files.academicDocuments.forEach((file, index) => {
-      allFiles.push({ 
-        file, 
-        type: `Academic Document ${files.academicDocuments.length > 1 ? index + 1 : ''}`.trim() 
+    // Safely handle academic documents array
+    if (Array.isArray(files.academicDocuments)) {
+      files.academicDocuments.forEach((file, index) => {
+        allFiles.push({ 
+          file, 
+          type: `Academic Document ${files.academicDocuments.length > 1 ? index + 1 : ''}`.trim() 
+        });
       });
-    });
+    }
     
-    files.identificationDocuments.forEach((file, index) => {
-      allFiles.push({ 
-        file, 
-        type: `ID Document ${files.identificationDocuments.length > 1 ? index + 1 : ''}`.trim() 
+    // Safely handle identification documents array
+    if (Array.isArray(files.identificationDocuments)) {
+      files.identificationDocuments.forEach((file, index) => {
+        allFiles.push({ 
+          file, 
+          type: `ID Document ${files.identificationDocuments.length > 1 ? index + 1 : ''}`.trim() 
+        });
       });
-    });
+    }
     
     return allFiles;
   };

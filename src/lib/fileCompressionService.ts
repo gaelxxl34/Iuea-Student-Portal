@@ -321,47 +321,85 @@ export const fileCompressionService = FileCompressionService.getInstance();
 // Utility functions
 export const compressApplicationDocuments = async (files: {
   passportPhoto?: File;
-  academicDocuments: File[];
-  identificationDocuments: File[];
+  academicDocuments?: File[];
+  identificationDocuments?: File[];
 }): Promise<{
   passportPhoto?: File;
   academicDocuments: File[];
   identificationDocuments: File[];
   compressionResults: CompressionResult[];
 }> => {
+  console.log('🗜️ Starting file compression...', { 
+    hasPassportPhoto: !!files.passportPhoto,
+    academicDocsCount: Array.isArray(files.academicDocuments) ? files.academicDocuments.length : 0,
+    identificationDocsCount: Array.isArray(files.identificationDocuments) ? files.identificationDocuments.length : 0
+  });
+
   const allFiles: File[] = [];
   const compressionResults: CompressionResult[] = [];
 
-  // Collect all files
+  // Collect all files with safe array handling
   if (files.passportPhoto) allFiles.push(files.passportPhoto);
-  allFiles.push(...files.academicDocuments);
-  allFiles.push(...files.identificationDocuments);
+  
+  // Safely handle academicDocuments array
+  const academicDocs = Array.isArray(files.academicDocuments) ? files.academicDocuments : [];
+  allFiles.push(...academicDocs);
+  
+  // Safely handle identificationDocuments array
+  const identificationDocs = Array.isArray(files.identificationDocuments) ? files.identificationDocuments : [];
+  allFiles.push(...identificationDocs);
+
+  // Early return if no files to compress
+  if (allFiles.length === 0) {
+    console.log('ℹ️ No files to compress, returning empty results');
+    return {
+      academicDocuments: [],
+      identificationDocuments: [],
+      compressionResults: []
+    };
+  }
 
   // Compress all files
   const results = await fileCompressionService.compressMultipleFiles(allFiles);
   compressionResults.push(...results);
 
-  // Reconstruct the file structure
+  // Reconstruct the file structure with guaranteed arrays
   let fileIndex = 0;
-  const compressedFiles: typeof files = {
+  const compressedFiles: {
+    passportPhoto?: File;
+    academicDocuments: File[];
+    identificationDocuments: File[];
+  } = {
     academicDocuments: [],
     identificationDocuments: []
   };
 
-  if (files.passportPhoto) {
+  if (files.passportPhoto && results[fileIndex]) {
     compressedFiles.passportPhoto = results[fileIndex].file;
     fileIndex++;
   }
 
-  for (let i = 0; i < files.academicDocuments.length; i++) {
-    compressedFiles.academicDocuments.push(results[fileIndex].file);
-    fileIndex++;
+  for (let i = 0; i < academicDocs.length; i++) {
+    if (results[fileIndex]) {
+      compressedFiles.academicDocuments.push(results[fileIndex].file);
+      fileIndex++;
+    }
   }
 
-  for (let i = 0; i < files.identificationDocuments.length; i++) {
-    compressedFiles.identificationDocuments.push(results[fileIndex].file);
-    fileIndex++;
+  for (let i = 0; i < identificationDocs.length; i++) {
+    if (results[fileIndex]) {
+      compressedFiles.identificationDocuments.push(results[fileIndex].file);
+      fileIndex++;
+    }
   }
+
+  console.log('✅ File compression completed', {
+    originalFiles: allFiles.length,
+    compressedFiles: results.length,
+    passportPhoto: !!compressedFiles.passportPhoto,
+    academicDocuments: compressedFiles.academicDocuments.length,
+    identificationDocuments: compressedFiles.identificationDocuments.length
+  });
 
   return {
     ...compressedFiles,

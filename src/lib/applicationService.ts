@@ -19,6 +19,7 @@ import {
 import { ref, uploadBytes, getDownloadURL, deleteObject } from 'firebase/storage';
 import { signInAnonymously } from 'firebase/auth';
 import { db, storage, auth } from '@/lib/firebase';
+import applicationNotificationService from '@/services/applicationNotificationService';
 
 // Application data interface for application portal form submissions
 export interface StudentApplicationData {
@@ -273,13 +274,13 @@ class StudentApplicationService {
 
         // Timeline - preserve existing timeline and add new entry
         timeline: [
-          ...(existingLead?.timeline || []),
+          ...(Array.isArray(existingLead?.timeline) ? existingLead.timeline : []),
           timelineEntry
         ],
 
         // Notes
         notes: existingLead?.notes || "",
-        tags: existingLead?.tags || [],
+        tags: Array.isArray(existingLead?.tags) ? existingLead.tags : [],
       };
 
       console.log('📋 Application data prepared:', applicationData);
@@ -724,6 +725,27 @@ class StudentApplicationService {
         }).catch((error) => {
           console.error('❌ Background document processing failed:', error);
         });
+      }
+      
+      // 3. Send application submission notifications (email and WhatsApp)
+      try {
+        console.log('📧 Sending application submission notifications...');
+        applicationNotificationService.sendApplicationSubmissionNotifications({
+          applicationId: applicationResult.applicationId,
+          phoneNumber: data.phone,
+          email: data.email,
+        }).then((notificationResult) => {
+          if (notificationResult.success) {
+            console.log('✅ Application notifications sent successfully');
+          } else {
+            console.warn('⚠️ Application notifications failed:', notificationResult.error);
+          }
+        }).catch((error) => {
+          console.error('❌ Error sending application notifications:', error);
+        });
+      } catch (error) {
+        console.error('❌ Non-critical error with notifications:', error);
+        // Don't fail the entire submission for notification errors
       }
       
       return {

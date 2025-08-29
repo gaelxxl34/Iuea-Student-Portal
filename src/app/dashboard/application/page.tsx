@@ -580,8 +580,14 @@ export default function ApplicationPage() {
       // Prepare file names for progress tracking
       const fileNames: string[] = [];
       if (files.passportPhoto) fileNames.push(files.passportPhoto.name);
-      files.academicDocuments.forEach(file => fileNames.push(file.name));
-      files.identificationDocuments.forEach(file => fileNames.push(file.name));
+      
+      // Safely handle arrays that might be undefined
+      if (Array.isArray(files.academicDocuments)) {
+        files.academicDocuments.forEach(file => fileNames.push(file.name));
+      }
+      if (Array.isArray(files.identificationDocuments)) {
+        files.identificationDocuments.forEach(file => fileNames.push(file.name));
+      }
       
       // Start progress tracking
       startProgress(fileNames);
@@ -2756,8 +2762,8 @@ export default function ApplicationPage() {
               
               {/* File Size Preview */}
               {(files.passportPhoto || 
-                files.academicDocuments.length > 0 || 
-                files.identificationDocuments.length > 0) && (
+                (Array.isArray(files.academicDocuments) && files.academicDocuments.length > 0) || 
+                (Array.isArray(files.identificationDocuments) && files.identificationDocuments.length > 0)) && (
                 <div className="mt-6">
                   <FileSizePreview
                     files={{
