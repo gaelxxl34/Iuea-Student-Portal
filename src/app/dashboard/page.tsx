@@ -6,7 +6,7 @@ import { useRouter } from 'next/navigation';
 import { useAuth } from '@/contexts/AuthContext';
 import { studentApplicationService, type Application } from '@/lib/applicationService';
 import { DashboardSkeleton } from '@/components/skeletons/DashboardSkeleton';
-
+import welcomeService from '@/services/welcomeService';
 export default function Dashboard() {
   const router = useRouter();
   const { user, userData, loading, refreshUser } = useAuth();
@@ -16,6 +16,53 @@ export default function Dashboard() {
   const [applicationsLoading, setApplicationsLoading] = useState(true);
   const [applicationsError, setApplicationsError] = useState<string | null>(null);
   const [isRefreshing, setIsRefreshing] = useState(false);
+
+  // Automatic welcome message function for first login
+  const sendWelcomeMessages = async () => {
+    if (!user || !userData) {
+      return;
+    }
+
+    // Check if welcome messages should be sent
+    const shouldSend = await welcomeService.shouldSendWelcomeMessages(user.uid);
+    if (!shouldSend) {
+      console.log('Welcome messages already sent for this user');
+      return;
+    }
+
+    console.log('🎉 First login detected, sending welcome messages...');
+    
+    const userName = `${userData.firstName || ''} ${userData.lastName || ''}`.trim() || user.displayName || 'Student';
+    const userEmail = user.email || '';
+    
+    try {
+      // Send welcome email
+      const emailResult = await welcomeService.sendWelcomeEmail({
+        userEmail,
+        userName,
+        isFirstLogin: true
+      });
+      
+      console.log('✅ Welcome email sent:', emailResult);
+      
+      // Send welcome WhatsApp message if phone number is available
+      if (userData.whatsappNumber) {
+        const whatsappResult = await welcomeService.sendWelcomeWhatsApp({
+          phoneNumber: userData.whatsappNumber,
+          userName,
+          isFirstLogin: true
+        });
+        
+        console.log('✅ Welcome WhatsApp sent:', whatsappResult);
+      }
+      
+      // Mark welcome messages as sent
+      welcomeService.markWelcomeMessagesSent(user.uid);
+      
+    } catch (error) {
+      console.error('❌ Error sending welcome messages:', error);
+    }
+  };
 
   // Refresh application data function
   const refreshApplicationData = async () => {
@@ -75,11 +122,16 @@ export default function Dashboard() {
             router.push('/verify-email');
           }
         }
+        
+        // If user is verified and we have user data, trigger welcome messages
+        if (user.emailVerified && userData) {
+          sendWelcomeMessages();
+        }
       }
     };
 
     checkAuthAndVerification();
-  }, [user, loading, router, refreshUser]);
+  }, [user, loading, userData, router, refreshUser]);
 
   // Load application data when user is available
   useEffect(() => {
@@ -384,6 +436,8 @@ export default function Dashboard() {
           )}
         </div>
       </div>
+
+
 
       {/* Main Content - 2 Column Layout on larger screens */}
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
