@@ -5,7 +5,7 @@
 import { auth } from "../lib/firebase";
 
 const API_BASE_URL =
-  process.env.NEXT_PUBLIC_BACKEND_URL || "https://api.nyotafusionai.com/";
+  process.env.NEXT_PUBLIC_BACKEND_URL || "https://api.nyotafusionai.com";
 
 class WelcomeApiService {
   /**
@@ -55,10 +55,21 @@ class WelcomeApiService {
         }),
       });
 
-      const data = await response.json();
+      let data;
+      try {
+        data = await response.json();
+      } catch {
+        // If response is not JSON (like HTML error page), create a generic error
+        data = {
+          error: `Server responded with ${response.status}: ${response.statusText}`,
+          details: "Response was not valid JSON",
+        };
+      }
 
       if (!response.ok) {
-        throw new Error(data.error || "Failed to send welcome email");
+        throw new Error(
+          data.error || `HTTP ${response.status}: ${response.statusText}`
+        );
       }
 
       return {
@@ -96,11 +107,20 @@ class WelcomeApiService {
         }),
       });
 
-      const data = await response.json();
+      let data;
+      try {
+        data = await response.json();
+      } catch {
+        // If response is not JSON (like HTML error page), create a generic error
+        data = {
+          error: `Server responded with ${response.status}: ${response.statusText}`,
+          details: "Response was not valid JSON",
+        };
+      }
 
       if (!response.ok) {
         throw new Error(
-          data.error || "Failed to send welcome WhatsApp message"
+          data.error || `HTTP ${response.status}: ${response.statusText}`
         );
       }
 

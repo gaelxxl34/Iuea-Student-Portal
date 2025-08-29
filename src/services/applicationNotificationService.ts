@@ -5,7 +5,7 @@
 import { auth } from "../lib/firebase";
 
 const API_BASE_URL =
-  process.env.NEXT_PUBLIC_BACKEND_URL || "https://api.nyotafusionai.com/";
+  process.env.NEXT_PUBLIC_BACKEND_URL || "https://api.nyotafusionai.com";
 
 interface ApplicationNotificationData {
   applicationId: string;
@@ -69,10 +69,19 @@ class ApplicationNotificationService {
         }),
       });
 
-      const responseData = await response.json();
+      let responseData;
+      try {
+        responseData = await response.json();
+      } catch {
+        // If response is not JSON (like HTML error page), create a generic error
+        responseData = { 
+          error: `Server responded with ${response.status}: ${response.statusText}`,
+          details: "Response was not valid JSON"
+        };
+      }
 
       if (!response.ok) {
-        throw new Error(responseData.error || "Failed to send application notifications");
+        throw new Error(responseData.error || `HTTP ${response.status}: ${response.statusText}`);
       }
 
       console.log('✅ Application notifications sent successfully:', responseData);
@@ -113,10 +122,19 @@ class ApplicationNotificationService {
         }),
       });
 
-      const responseData = await response.json();
+      let responseData;
+      try {
+        responseData = await response.json();
+      } catch {
+        // If response is not JSON (like HTML error page), create a generic error
+        responseData = { 
+          error: `Server responded with ${response.status}: ${response.statusText}`,
+          details: "Response was not valid JSON"
+        };
+      }
 
       if (!response.ok) {
-        throw new Error(responseData.error || "Failed to send application email");
+        throw new Error(responseData.error || `HTTP ${response.status}: ${response.statusText}`);
       }
 
       console.log('✅ Application email sent successfully:', responseData);
@@ -157,10 +175,19 @@ class ApplicationNotificationService {
         }),
       });
 
-      const responseData = await response.json();
+      let responseData;
+      try {
+        responseData = await response.json();
+      } catch {
+        // If response is not JSON (like HTML error page), create a generic error
+        responseData = { 
+          error: `Server responded with ${response.status}: ${response.statusText}`,
+          details: "Response was not valid JSON"
+        };
+      }
 
       if (!response.ok) {
-        throw new Error(responseData.error || "Failed to send application WhatsApp message");
+        throw new Error(responseData.error || `HTTP ${response.status}: ${response.statusText}`);
       }
 
       console.log('✅ Application WhatsApp message sent successfully:', responseData);
@@ -170,7 +197,7 @@ class ApplicationNotificationService {
         message: "Application WhatsApp message sent successfully",
         data: responseData,
       };
-    } catch (error) {
+    } catch (error: unknown) {
       console.error("❌ Application WhatsApp API error:", error);
       return {
         success: false,

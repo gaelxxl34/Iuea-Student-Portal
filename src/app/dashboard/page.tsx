@@ -18,7 +18,7 @@ export default function Dashboard() {
   const [isRefreshing, setIsRefreshing] = useState(false);
 
   // Automatic welcome message function for first login
-  const sendWelcomeMessages = async () => {
+  const sendWelcomeMessages = useCallback(async () => {
     if (!user || !userData) {
       return;
     }
@@ -62,7 +62,7 @@ export default function Dashboard() {
     } catch (error) {
       console.error('❌ Error sending welcome messages:', error);
     }
-  };
+  }, [user, userData]);
 
   // Refresh application data function
   const refreshApplicationData = async () => {
