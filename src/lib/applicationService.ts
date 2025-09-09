@@ -28,6 +28,7 @@ export interface StudentApplicationData {
   email: string;
   phone: string;
   countryOfBirth: string;
+  dateOfBirth: string;
   gender: string;
   modeOfStudy: string;
   preferredIntake: string;
@@ -72,6 +73,7 @@ export interface Application {
   email: string;
   phoneNumber: string;
   countryOfBirth: string;
+  dateOfBirth?: string;
   gender: string;
   modeOfStudy: string;
   preferredIntake: string;
@@ -94,6 +96,7 @@ export interface Application {
 export const LEAD_STATUSES = {
   INTERESTED: "INTERESTED",
   APPLIED: "APPLIED",
+  MISSING_DOCUMENT: "MISSING_DOCUMENT",
   IN_REVIEW: "IN_REVIEW",
   QUALIFIED: "QUALIFIED",
   ADMITTED: "ADMITTED",
@@ -125,6 +128,7 @@ export const LEAD_SOURCES = {
 export const APPLICATION_STATUSES = {
   INTERESTED: "INTERESTED",
   APPLIED: "APPLIED",
+  MISSING_DOCUMENT: "MISSING_DOCUMENT",
   IN_REVIEW: "IN_REVIEW",
   QUALIFIED: "QUALIFIED",
   ADMITTED: "ADMITTED",
@@ -183,6 +187,7 @@ class StudentApplicationService {
         // Personal Information
         name: `${data.firstName} ${data.lastName}`,
         countryOfBirth: data.countryOfBirth,
+        dateOfBirth: data.dateOfBirth || null,
         gender: data.gender,
         email: data.email.toLowerCase(),
         phoneNumber: data.phone,
@@ -978,6 +983,7 @@ class StudentApplicationService {
           email: data.email || '',
           phoneNumber: data.phoneNumber || '',
           countryOfBirth: data.countryOfBirth || '',
+          dateOfBirth: data.dateOfBirth || '',
           gender: data.gender || '',
           modeOfStudy: data.modeOfStudy || '',
           preferredIntake: data.preferredIntake || '',
@@ -1044,6 +1050,15 @@ class StudentApplicationService {
         status = 'Application Submitted';
         statusColor = 'text-purple-800';
         statusBgColor = 'bg-purple-100';
+        nextAction = 'Upload Required Documents';
+        break;
+        
+      case 'missing_document':
+        completedSteps = 1;
+        progressPercentage = 20; // Same as APPLIED (20%)
+        status = 'Missing Documents';
+        statusColor = 'text-red-800';
+        statusBgColor = 'bg-red-100';
         nextAction = 'Upload Required Documents';
         break;
       
@@ -1165,6 +1180,7 @@ class StudentApplicationService {
         email: data.email,
         phoneNumber: data.phone,
         countryOfBirth: data.countryOfBirth,
+        dateOfBirth: data.dateOfBirth || null,
         gender: data.gender,
         postalAddress: data.postalAddress,
         preferredProgram: data.preferredProgram,
@@ -1215,6 +1231,7 @@ class StudentApplicationService {
         email: data.email,
         phoneNumber: data.phone,
         countryOfBirth: data.countryOfBirth,
+        dateOfBirth: data.dateOfBirth || null,
         gender: data.gender,
         postalAddress: data.postalAddress,
         preferredProgram: data.preferredProgram,

@@ -14,6 +14,7 @@ import { FileSizePreview } from '@/components/FileSizePreview';
 import { useUploadProgress } from '@/hooks/useUploadProgress';
 import { compressApplicationDocuments } from '@/lib/fileCompressionService';
 import metaPixel from '@/lib/metaPixel';
+// import { type PaymentResponse } from '@/components/FlutterwavePayment'; // DISABLED - Components show "not ready" message
 
 // Form data interface for the application form
 interface FormData {
@@ -23,6 +24,7 @@ interface FormData {
   email: string;
   phone: string;
   countryOfBirth: string;
+  dateOfBirth: string;
   gender: string;
   postalAddress: string;
   
@@ -71,6 +73,17 @@ export default function ApplicationPage() {
   const [isEditing, setIsEditing] = useState(true);
   const [isSubmitting, setIsSubmitting] = useState(false);
   
+  // Payment state - TEMPORARILY DISABLED
+  // const [paymentData, setPaymentData] = useState<{
+  //   status: 'pending' | 'completed' | 'failed';
+  //   type?: 'pay_now' | 'pay_later';
+  //   transactionId?: string;
+  //   amount?: number;
+  //   currency?: string;
+  // }>({
+  //   status: 'completed' // TEMPORARILY SET TO COMPLETED TO BYPASS PAYMENT
+  // });
+  
   // Application status management
   const [submittedApplication, setSubmittedApplication] = useState<ApplicationWithProgress | null>(null);
   const [isLoadingApplication, setIsLoadingApplication] = useState(false);
@@ -101,6 +114,7 @@ export default function ApplicationPage() {
       email: userData?.email || user?.email || '',
       phone: userData?.whatsappNumber || '',
       countryOfBirth: '',
+      dateOfBirth: '',
       gender: '',
       postalAddress: '',
       
@@ -129,6 +143,7 @@ export default function ApplicationPage() {
     if (!formData.email.trim()) errors.push('Email is required');
     if (!formData.phone.trim()) errors.push('Phone number is required');
     if (!formData.countryOfBirth.trim()) errors.push('Country of birth is required');
+    if (!formData.dateOfBirth.trim()) errors.push('Date of birth is required');
     if (!formData.gender.trim()) errors.push('Gender is required');
     if (!formData.postalAddress.trim()) errors.push('Physical address is required');
     
@@ -166,9 +181,9 @@ export default function ApplicationPage() {
     
     if (!formData.howDidYouHear.trim()) errors.push('Please tell us how you heard about the university');
     
-    // Sponsor details are now required
-    if (!formData.sponsorTelephone.trim()) errors.push('Sponsor telephone is required');
-    if (!formData.sponsorEmail.trim()) errors.push('Sponsor email is required');
+    // Sponsor details are now OPTIONAL (payment system disabled)
+    // if (!formData.sponsorTelephone.trim()) errors.push('Sponsor telephone is required');
+    // if (!formData.sponsorEmail.trim()) errors.push('Sponsor email is required');
     
     // Sponsor phone validation (when provided)
     if (formData.sponsorTelephone && !isValidPhoneNumber(formData.sponsorTelephone)) {
@@ -185,6 +200,28 @@ export default function ApplicationPage() {
       errors
     };
   };
+
+  const validatePaymentSection = (): { isValid: boolean; errors: string[] } => {
+    // TEMPORARILY DISABLED - Payment is not required until system is ready
+    return {
+      isValid: true,
+      errors: []
+    };
+    
+    // ORIGINAL CODE - COMMENTED OUT
+    /*
+    const errors: string[] = [];
+    
+    if (paymentData.status !== 'completed') {
+      errors.push('Payment is required to complete your application');
+    }
+    
+    return {
+      isValid: errors.length === 0,
+      errors
+    };
+    */
+  };
   
   // Function to check if a section is completed (now applicationData is available)
   const isSectionCompleted = (sectionId: string): boolean => {
@@ -195,14 +232,16 @@ export default function ApplicationPage() {
         return validateProgramSection(applicationData).isValid;
       case 'additional':
         return validateAdditionalSection(applicationData).isValid;
+      case 'payment':
+        return validatePaymentSection().isValid;
       default:
         return false;
     }
   };
 
-  // Function to check if a section can be accessed
+  // Function to check if a section can be accessed (payment disabled)
   const canAccessSection = (sectionId: string): boolean => {
-    const sections = ['personal', 'program', 'additional'];
+    const sections = ['personal', 'program', 'additional']; // removed 'payment'
     const currentIndex = sections.findIndex(section => section === activeSection);
     const targetIndex = sections.findIndex(section => section === sectionId);
     
@@ -220,11 +259,12 @@ export default function ApplicationPage() {
     return true;
   };
 
-  // Application form sections - with dynamic completion status (now applicationData is available)
+  // Application form sections - with dynamic completion status (payment temporarily disabled)
   const formSections = [
     { id: 'personal', name: 'Personal Details', completed: isSectionCompleted('personal') },
     { id: 'program', name: 'Program Selection', completed: isSectionCompleted('program') },
     { id: 'additional', name: 'Additional Information', completed: isSectionCompleted('additional') },
+    // { id: 'payment', name: 'Payment', completed: isSectionCompleted('payment') }, // TEMPORARILY DISABLED
   ];
 
   // Pre-populate form with user data when available
@@ -437,6 +477,8 @@ export default function ApplicationPage() {
         return 'text-blue-600 bg-blue-100';
       case 'applied':
         return 'text-purple-600 bg-purple-100';
+      case 'missing_document':
+        return 'text-red-600 bg-red-100';
       case 'in_review':
         return 'text-yellow-600 bg-yellow-100';
       case 'qualified':
@@ -453,6 +495,49 @@ export default function ApplicationPage() {
         return 'text-gray-600 bg-gray-100';
     }
   };
+
+  // Handler for payment success - TEMPORARILY DISABLED
+  // const handlePaymentSuccess = (response: PaymentResponse, paymentType: 'pay_now' | 'pay_later') => {
+  //   console.log('Payment handling temporarily disabled:', response, paymentType);
+  //   
+  //   // ORIGINAL CODE COMMENTED OUT
+  //   /*
+  //   console.log('Payment successful:', response, paymentType);
+  //   
+  //   setPaymentData({
+  //     status: 'completed',
+  //     type: paymentType,
+  //     transactionId: response.transaction_id,
+  //     amount: response.amount,
+  //     currency: response.currency,
+  //   });
+  //   
+  //   showSuccess(
+  //     'Payment Successful!',
+  //     `Your ${paymentType === 'pay_now' ? 'full payment' : 'partial payment (30%)'} has been processed successfully. Transaction ID: ${response.transaction_id}`,
+  //     8000
+  //   );
+  //   
+  //   // Move to submission if all sections are complete
+  //   if (isSectionCompleted('personal') && isSectionCompleted('program') && isSectionCompleted('additional')) {
+  //     showSuccess(
+  //       'Ready for Submission!',
+  //       'All sections completed. You can now submit your application.',
+  //       5000
+  //     );
+  //   }
+  //   */
+  // };
+  
+  // Handler for payment cancellation
+  // const handlePaymentCancel = () => {
+  //   console.log('Payment cancelled by user');
+  //   showWarning(
+  //     'Payment Cancelled',
+  //     'Payment was cancelled. You can try again when ready.',
+  //     5000
+  //   );
+  // };
 
   // Handler for section navigation with validation
   const handleSectionClick = (sectionId: string) => {
@@ -493,16 +578,18 @@ export default function ApplicationPage() {
     setActiveSection(sectionId);
   };
 
-  // Validation function for final submission
+  // Validation function for final submission (payment temporarily removed)
   const validateFormData = (formData: FormData): { isValid: boolean; errors: string[] } => {
     const personalValidation = validatePersonalSection(formData);
     const programValidation = validateProgramSection(formData);
     const additionalValidation = validateAdditionalSection(formData);
+    // const paymentValidation = validatePaymentSection(); // TEMPORARILY DISABLED
     
     const allErrors = [
       ...personalValidation.errors,
       ...programValidation.errors,
-      ...additionalValidation.errors
+      ...additionalValidation.errors,
+      // ...paymentValidation.errors // TEMPORARILY DISABLED
     ];
     
     return {
@@ -600,6 +687,7 @@ export default function ApplicationPage() {
         email: applicationData.email,
         phone: applicationData.phone,
         countryOfBirth: applicationData.countryOfBirth,
+        dateOfBirth: applicationData.dateOfBirth,
         gender: applicationData.gender,
         postalAddress: applicationData.postalAddress,
         preferredProgram: applicationData.program,
@@ -792,6 +880,7 @@ export default function ApplicationPage() {
         email: applicationData.email,
         phone: applicationData.phone,
         countryOfBirth: applicationData.countryOfBirth,
+        dateOfBirth: applicationData.dateOfBirth,
         gender: applicationData.gender,
         postalAddress: applicationData.postalAddress,
         preferredProgram: applicationData.program,
@@ -1082,9 +1171,7 @@ export default function ApplicationPage() {
         ],
         'Faculty of Science and Technology (FST)': [
           'CISCO (3 months)',
-          'Bachelor of Information Technology (Web Dev)',
-          'Bachelor of Information Technology (Mobile Programming)',
-          'Bachelor of Information Technology (Networking)',
+          'Bachelor of Information Technology',
           'Bachelor of Science in Computer Science',
           'Bachelor of Science in Environmental Science & Management',
           'Bachelor of Science in Software Engineering',
@@ -1104,7 +1191,7 @@ export default function ApplicationPage() {
           'Bachelor of Science in Communications Engineering'
         ],
         'Faculty of Law and Humanities (FLH)': [
-          'Bachelor of Laws',
+          'Bachelor of Laws (LLB)',
           'Bachelor of International Relations & Diplomatic Studies',
           'Bachelor of Journalism & Communication Studies',
           'Master of International Relations & Diplomatic Studies'
@@ -1125,9 +1212,7 @@ export default function ApplicationPage() {
         ],
         'Faculty of Science and Technology (FST)': [
           'CISCO (3 months)',
-          'Bachelor of Information Technology (Web Dev)',
-          'Bachelor of Information Technology (Mobile Programming)',
-          'Bachelor of Information Technology (Networking)',
+          'Bachelor of Information Technology',
           'Bachelor of Science in Computer Science',
           'Bachelor of Science in Environmental Science & Management',
           'Bachelor of Science in Software Engineering',
@@ -1146,9 +1231,7 @@ export default function ApplicationPage() {
         ],
         'Faculty of Science and Technology (FST)': [
           'CISCO (3 months)',
-          'Bachelor of Information Technology (Web Dev)',
-          'Bachelor of Information Technology (Mobile Programming)',
-          'Bachelor of Information Technology (Networking)',
+          'Bachelor of Information Technology',
           'Bachelor of Science in Computer Science',
           'Bachelor of Science in Environmental Science & Management',
           'Bachelor of Science in Software Engineering',
@@ -1168,7 +1251,7 @@ export default function ApplicationPage() {
           'Bachelor of Science in Communications Engineering'
         ],
         'Faculty of Law and Humanities (FLH)': [
-          'Bachelor of Laws',
+          'Bachelor of Laws (LLB)',
           'Bachelor of International Relations & Diplomatic Studies',
           'Bachelor of Journalism & Communication Studies',
           'Master of International Relations & Diplomatic Studies'
@@ -1241,9 +1324,9 @@ export default function ApplicationPage() {
     return Object.values(programs).reduce((total: number, facultyPrograms) => total + (facultyPrograms as string[]).length, 0);
   };
 
-  // Get form completion percentage
+  // Get form completion percentage (payment temporarily removed)
   const getFormCompletionPercentage = () => {
-    const totalFields = 13; // Total required fields (added sponsor fields)
+    const totalFields = 11; // Reduced from 14 (removed payment fields)
     let completedFields = 0;
     
     if (applicationData.firstName.trim()) completedFields++;
@@ -1257,8 +1340,9 @@ export default function ApplicationPage() {
     if (applicationData.modeOfStudy.trim()) completedFields++;
     if (applicationData.intake.trim()) completedFields++;
     if (applicationData.howDidYouHear.trim()) completedFields++;
-    if (applicationData.sponsorTelephone.trim()) completedFields++; // Added sponsor phone
-    if (applicationData.sponsorEmail.trim()) completedFields++; // Added sponsor email
+    // if (applicationData.sponsorTelephone.trim()) completedFields++; // Made optional temporarily
+    // if (applicationData.sponsorEmail.trim()) completedFields++; // Made optional temporarily
+    // if (paymentData.status === 'completed') completedFields++; // TEMPORARILY REMOVED
     
     const percentage = Math.round((completedFields / totalFields) * 100);
     // Ensure percentage never exceeds 100% or goes below 0%
@@ -1556,6 +1640,7 @@ export default function ApplicationPage() {
                       email: submittedApplication.email,
                       phone: submittedApplication.phoneNumber,
                       countryOfBirth: submittedApplication.countryOfBirth || '',
+                      dateOfBirth: submittedApplication.dateOfBirth || '',
                       gender: submittedApplication.gender || '',
                       postalAddress: submittedApplication.postalAddress || '',
                       program: submittedApplication.preferredProgram || '',
@@ -1630,6 +1715,20 @@ export default function ApplicationPage() {
               <div>
                 <label className="block text-sm font-medium text-slate-600 mb-1">Country of Birth</label>
                 <p className="text-slate-800">{submittedApplication.countryOfBirth}</p>
+              </div>
+              
+              <div>
+                <label className="block text-sm font-medium text-slate-600 mb-1">Date of Birth</label>
+                <p className="text-slate-800">
+                  {submittedApplication.dateOfBirth ? 
+                    new Date(submittedApplication.dateOfBirth).toLocaleDateString('en-US', {
+                      year: 'numeric',
+                      month: 'long',
+                      day: 'numeric'
+                    }) : 
+                    'Not provided'
+                  }
+                </p>
               </div>
               
               <div>
@@ -1804,6 +1903,7 @@ export default function ApplicationPage() {
                         email: submittedApplication.email,
                         phone: submittedApplication.phoneNumber,
                         countryOfBirth: submittedApplication.countryOfBirth || '',
+                        dateOfBirth: submittedApplication.dateOfBirth || '',
                         gender: submittedApplication.gender || '',
                         postalAddress: submittedApplication.postalAddress || '',
                         program: submittedApplication.preferredProgram || '',
@@ -2346,6 +2446,23 @@ export default function ApplicationPage() {
                   
                   <div>
                     <label className="block text-sm font-medium text-slate-800 mb-2">
+                      Date of Birth <span className="text-red-600">*</span>
+                    </label>
+                    <input
+                      type="date"
+                      value={applicationData.dateOfBirth}
+                      onChange={(e) => handleInputChange('dateOfBirth', e.target.value)}
+                      readOnly={!isEditing}
+                      className={`w-full px-4 py-3 rounded-lg border-2 border-slate-200 text-base ${
+                        isEditing ? 'bg-white' : 'bg-[#f7f7f7]'
+                      }`}
+                    />
+                  </div>
+                </div>
+                
+                <div className="grid grid-cols-1 sm:grid-cols-1 gap-4">
+                  <div>
+                    <label className="block text-sm font-medium text-slate-800 mb-2">
                       Gender <span className="text-red-600">*</span>
                     </label>
                     {isEditing ? (
@@ -2856,11 +2973,11 @@ export default function ApplicationPage() {
               
               {/* Sponsorship Information */}
               <div className="mb-6">
-                <h3 className="text-sm font-semibold text-slate-800 mb-3">Sponsorship Information</h3>
+                <h3 className="text-sm font-semibold text-slate-800 mb-3">Sponsorship Information <span className="text-sm font-normal text-slate-500">(Optional)</span></h3>
                 <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                   <div>
                     <label className="block text-sm font-medium text-slate-800 mb-1">
-                      Sponsor Telephone
+                      Sponsor Telephone <span className="text-slate-500">(Optional)</span>
                     </label>
                     {isEditing ? (
                       <div className="w-full px-3 py-2 rounded-lg border-2 border-slate-200 text-sm bg-white focus-within:border-red-800 hover:border-red-800/50 transition-colors">
@@ -2891,7 +3008,7 @@ export default function ApplicationPage() {
                   </div>
                   <div>
                     <label className="block text-sm font-medium text-slate-800 mb-1">
-                      Sponsor Email
+                      Sponsor Email <span className="text-slate-500">(Optional)</span>
                     </label>
                     <input
                       type="email"
@@ -2981,6 +3098,8 @@ export default function ApplicationPage() {
                   Previous: Program Selection
                 </button>
 
+                {/* PAYMENT SECTION TEMPORARILY REMOVED */}
+
                 <button
                   onClick={
                     submittedApplication && isEditing 
@@ -3026,6 +3145,155 @@ export default function ApplicationPage() {
               </div>
             </div>
           )}
+
+          {/* PAYMENT SECTION TEMPORARILY DISABLED */}
+          {/*
+          {activeSection === 'payment' && (
+            <div className="bg-white rounded-lg p-4 md:p-6 border border-slate-200">
+              <div className="flex flex-col sm:flex-row sm:justify-between sm:items-center mb-4 gap-2">
+                <h2 className="text-base md:text-lg font-semibold text-slate-800">Payment</h2>
+                <span className={`text-xs px-2 py-1 rounded-full w-fit ${
+                  isSectionCompleted('payment') 
+                    ? 'bg-green-100 text-green-700' 
+                    : 'bg-yellow-100 text-yellow-700'
+                }`}>
+                  {isSectionCompleted('payment') ? 'Completed' : 'Pending'}
+                </span>
+              </div>
+
+              Payment Status Display 
+              {paymentData.status === 'completed' ? (
+                <div className="mb-6">
+                  <div className="bg-green-50 border border-green-200 rounded-lg p-4">
+                    <div className="flex items-center mb-3">
+                      <div className="h-10 w-10 bg-green-100 rounded-full flex items-center justify-center mr-3">
+                        <i className="ri-check-line text-green-600 text-lg"></i>
+                      </div>
+                      <div>
+                        <h3 className="text-green-800 font-semibold">Payment Completed!</h3>
+                        <p className="text-green-700 text-sm">
+                          {paymentData.type === 'pay_now' ? 'Full payment processed' : 'Partial payment processed (30%)'}
+                        </p>
+                      </div>
+                    </div>
+                    
+                    <div className="grid grid-cols-1 md:grid-cols-2 gap-4 text-sm">
+                      <div>
+                        <span className="text-green-600 font-medium">Transaction ID:</span>
+                        <p className="text-green-800 font-mono">{paymentData.transactionId}</p>
+                      </div>
+                      <div>
+                        <span className="text-green-600 font-medium">Amount Paid:</span>
+                        <p className="text-green-800 font-semibold">
+                          {paymentData.amount && paymentData.currency && 
+                            new Intl.NumberFormat('en-UG', {
+                              style: 'currency',
+                              currency: paymentData.currency,
+                              minimumFractionDigits: 0,
+                            }).format(paymentData.amount)
+                          }
+                        </p>
+                      </div>
+                      <div>
+                        <span className="text-green-600 font-medium">Payment Type:</span>
+                        <p className="text-green-800 capitalize">
+                          {paymentData.type === 'pay_now' ? 'Full Payment' : 'Pay Later (30% Now)'}
+                        </p>
+                      </div>
+                      <div>
+                        <span className="text-green-600 font-medium">Status:</span>
+                        <p className="text-green-800 font-semibold">Verified</p>
+                      </div>
+                    </div>
+
+                    {paymentData.type === 'pay_later' && (
+                      <div className="mt-4 p-3 bg-amber-50 border border-amber-200 rounded-lg">
+                        <div className="flex items-center">
+                          <i className="ri-information-line text-amber-600 mr-2"></i>
+                          <div>
+                            <p className="text-amber-800 text-sm font-medium">Payment Reminder</p>
+                            <p className="text-amber-700 text-xs mt-1">
+                              Remaining balance (70%) must be paid before course commencement. You will receive payment reminders.
+                            </p>
+                          </div>
+                        </div>
+                      </div>
+                    )}
+                  </div>
+                </div>
+              ) : (
+                Payment Options Display 
+                <div className="mb-6">
+                  <PaymentOptions
+                    applicationFee={parseInt(process.env.NEXT_PUBLIC_APPLICATION_FEE_UGX || '150000')}
+                    currency="UGX"
+                    customerInfo={{
+                      name: `${applicationData.firstName} ${applicationData.lastName}`,
+                      email: applicationData.email,
+                      phone: applicationData.phone,
+                    }}
+                    applicationId={`temp_${Date.now()}`}
+                    onPaymentSuccess={handlePaymentSuccess}
+                    onCancel={handlePaymentCancel}
+                  />
+                </div>
+              )}
+
+              <div className="flex flex-col sm:flex-row sm:justify-between gap-3">
+                <button
+                  onClick={() => handleSectionClick('additional')}
+                  className="px-4 py-2 text-sm border border-slate-200 text-slate-800 rounded-lg hover:border-red-800 hover:text-red-800 transition-colors"
+                >
+                  <i className="ri-arrow-left-line mr-1"></i>
+                  Previous: Additional Information
+                </button>
+
+                <button
+                  onClick={
+                    submittedApplication && isEditing 
+                      ? handleUpdateApplication 
+                      : submittedApplication && !isEditing 
+                      ? handleUpdateDocuments 
+                      : handleSubmitApplication
+                  }
+                  disabled={
+                    isSubmitting || 
+                    (!submittedApplication && (!isSectionCompleted('personal') || !isSectionCompleted('program') || !isSectionCompleted('additional')))
+                  }
+                  className="px-4 py-2 text-sm bg-green-600 text-white rounded-lg hover:bg-green-700 transition-colors disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center"
+                >
+                  {isSubmitting ? (
+                    <>
+                      <i className="ri-loader-4-line mr-2 animate-spin"></i>
+                      {submittedApplication && isEditing 
+                        ? 'Updating...' 
+                        : submittedApplication && !isEditing 
+                        ? 'Updating...' 
+                        : 'Submitting...'
+                      }
+                    </>
+                  ) : (
+                    <>
+                      <i className={`${
+                        submittedApplication && isEditing 
+                          ? 'ri-save-line' 
+                          : submittedApplication && !isEditing 
+                          ? 'ri-upload-line' 
+                          : 'ri-send-plane-line'
+                      } mr-2`}></i>
+                      {submittedApplication && isEditing 
+                        ? 'Update Application' 
+                        : submittedApplication && !isEditing 
+                        ? 'Update Documents' 
+                        : 'Submit Application'
+                      }
+                    </>
+                  )}
+                </button>
+              </div>
+            </div>
+          )}
+          */}
         </div>
       </div>
         </>
