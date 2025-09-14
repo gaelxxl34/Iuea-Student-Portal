@@ -21,8 +21,8 @@ export default function WelcomePage() {
     { label: 'Programs', value: '30+', count: 30 },
     { label: 'Top Ranked', value: 'University', count: null },
     { label: 'Global', value: 'Partnerships', count: null },
-    { label: 'Graduate', value: 'Employment', count: null },
-    { label: 'Academic', value: 'Excellence', count: null },
+    { label: 'Graduate', value: '95%', count: 95 },
+    { label: 'Excellence', value: 'Research', count: null },
   ], []);
 
   useEffect(() => {
@@ -335,7 +335,7 @@ export default function WelcomePage() {
               </div>
             </div>
             <div className="absolute bottom-4 left-4 rounded-md bg-white/90 backdrop-blur px-3 py-1.5 text-xs font-medium shadow-soft">
-              25+ Years • Excellence & Innovation
+              12+ Years • Excellence & Innovation
             </div>
           </div>
         </div>
