@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useEffect, useRef } from 'react';
+import { useState, useEffect, useRef, useMemo } from 'react';
 import Link from 'next/link';
 import Image from 'next/image';
 
@@ -17,13 +17,13 @@ export default function WelcomePage() {
   ];
 
   // Stats data with animation counters
-  const stats = [
+  const stats = useMemo(() => [
     { label: 'Programs', value: '30+', count: 30 },
     { label: 'Top Ranked', value: 'University', count: null },
     { label: 'Global', value: 'Partnerships', count: null },
     { label: 'Graduate', value: 'Employment', count: null },
     { label: 'Academic', value: 'Excellence', count: null },
-  ];
+  ], []);
 
   useEffect(() => {
     // Auto-slide gallery
@@ -247,11 +247,11 @@ export default function WelcomePage() {
 
             {/* STAT CARDS with hover + animated counters */}
             <div ref={statsRef} className="mt-9 grid grid-cols-2 sm:grid-cols-3 gap-3">
-              {stats.map((stat, index) => (
+              {stats.map((stat, statIndex) => (
                 <div 
-                  key={index}
+                  key={statIndex}
                   className="rounded-lg bg-white p-4 shadow-soft hover:-translate-y-1 hover:shadow-lg transition animate-fadeUp"
-                  style={{animationDelay: `${index * 120}ms`}}
+                  style={{animationDelay: `${statIndex * 120}ms`}}
                 >
                   <div className="text-2xl font-extrabold text-neutral-900">
                     {stat.count !== null ? (
@@ -320,12 +320,12 @@ export default function WelcomePage() {
                     
                     {/* indicators */}
                     <div className="absolute bottom-3 left-0 right-0 flex justify-center gap-2">
-                      {galleryImages.map((_, index) => (
+                      {galleryImages.map((_, imgIndex) => (
                         <button
-                          key={index}
-                          onClick={() => setCurrentSlide(index)}
+                          key={imgIndex}
+                          onClick={() => setCurrentSlide(imgIndex)}
                           className={`h-2.5 w-2.5 rounded-full border border-white/70 transition-all ${
-                            index === currentSlide ? 'bg-white scale-125' : 'bg-white/60'
+                            imgIndex === currentSlide ? 'bg-white scale-125' : 'bg-white/60'
                           }`}
                         />
                       ))}

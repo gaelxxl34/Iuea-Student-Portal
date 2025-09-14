@@ -57,7 +57,24 @@ const createLeadFromSignup = async (
     try {
       console.log(`🔍 Checking for existing lead with email: ${email} or phone: ${whatsappNumber}`);
       // Access the private method through reflection (TypeScript workaround)
-      existingLead = await (studentApplicationService as any).findExistingLead(email, whatsappNumber);
+      existingLead = await (studentApplicationService as unknown as { findExistingLead: (email: string, phone: string) => Promise<{
+        id: string;
+        status: string;
+        source: string;
+        createdAt: string;
+        assignedTo?: string;
+        priority?: string;
+        totalInteractions?: number;
+        lastInteractionAt?: string;
+        timeline?: Array<{
+          date: string;
+          action: string;
+          status: string;
+          notes: string;
+        }>;
+        notes?: string;
+        tags?: string[];
+      } | null> }).findExistingLead(email, whatsappNumber);
     } catch (duplicateCheckError) {
       console.warn('⚠️ Error checking for existing leads, will proceed with creating new lead:', duplicateCheckError);
       // Continue with creating new lead if duplicate checking fails
@@ -73,7 +90,7 @@ const createLeadFromSignup = async (
           console.log(`🔄 Updating existing CONTACTED lead ${existingLead.id} to INTERESTED status`);
           
           // Prepare update data
-          const updateData: any = {
+          const updateData: Record<string, unknown> = {
             status: LEAD_STATUSES.INTERESTED,
             updatedAt: new Date(),
             name: fullName, // Update name in case it's different
@@ -115,7 +132,7 @@ const createLeadFromSignup = async (
         
         try {
           // Just update the name and add timeline entry for signup
-          const updateData: any = {
+          const updateData: Record<string, unknown> = {
             updatedAt: new Date(),
             name: fullName, // Update name in case it's different
           };
