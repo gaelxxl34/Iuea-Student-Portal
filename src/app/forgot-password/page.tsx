@@ -76,24 +76,28 @@ export default function ForgotPasswordPage() {
           <div className="w-full max-w-md mx-auto text-center">
             {/* Mobile Brand Header */}
             <div className="lg:hidden mb-6">
-              <Image 
-                src="https://iuea.ac.ug/sitepad-data/uploads/2020/11/Website-Logo.png" 
-                alt="IUEA Logo" 
-                width={128}
-                height={128}
-                className="w-32 h-32 mx-auto mb-3 object-contain"
-              />
+              <Link href="/" className="inline-block">
+                <Image 
+                  src="/small logo iuea.png" 
+                  alt="IUEA Logo" 
+                  width={128}
+                  height={128}
+                  className="w-32 h-32 mx-auto mb-3 object-contain hover:opacity-80 transition-opacity cursor-pointer"
+                />
+              </Link>
             </div>
 
             {/* Desktop Header */}
             <div className="hidden lg:block mb-6">
-              <Image 
-                src="https://iuea.ac.ug/sitepad-data/uploads/2020/11/Website-Logo.png" 
-                alt="IUEA Logo" 
-                width={160}
-                height={160}
-                className="w-40 h-40 mx-auto mb-3 object-contain"
-              />
+              <Link href="/" className="inline-block">
+                <Image 
+                  src="/small logo iuea.png" 
+                  alt="IUEA Logo" 
+                  width={160}
+                  height={160}
+                  className="w-40 h-40 mx-auto mb-3 object-contain hover:opacity-80 transition-opacity cursor-pointer"
+                />
+              </Link>
             </div>
 
             {/* Success Message */}
@@ -155,26 +159,30 @@ export default function ForgotPasswordPage() {
         <div className="w-full max-w-md mx-auto">
           {/* Mobile Brand Header */}
           <div className="lg:hidden text-center mb-6">
-            <Image 
-              src="https://iuea.ac.ug/sitepad-data/uploads/2020/11/Website-Logo.png" 
-              alt="IUEA Logo" 
-              width={128}
-              height={128}
-              className="w-32 h-32 mx-auto mb-3 object-contain"
-            />
+            <Link href="/" className="inline-block">
+              <Image 
+                src="/small logo iuea.png" 
+                alt="IUEA Logo" 
+                width={128}
+                height={128}
+                className="w-32 h-32 mx-auto mb-3 object-contain hover:opacity-80 transition-opacity cursor-pointer"
+              />
+            </Link>
             <h1 className="text-xl font-bold text-[#333333] mb-2">Reset Password</h1>
             <p className="text-[#333333]/70 text-sm">Enter your email to receive reset instructions</p>
           </div>
 
           {/* Desktop Header */}
           <div className="hidden lg:block text-center mb-6">
-            <Image 
-              src="https://iuea.ac.ug/sitepad-data/uploads/2020/11/Website-Logo.png" 
-              alt="IUEA Logo" 
-              width={160}
-              height={160}
-              className="w-40 h-40 mx-auto mb-3 object-contain"
-            />
+            <Link href="/" className="inline-block">
+              <Image 
+                src="/small logo iuea.png" 
+                alt="IUEA Logo" 
+                width={160}
+                height={160}
+                className="w-40 h-40 mx-auto mb-3 object-contain hover:opacity-80 transition-opacity cursor-pointer"
+              />
+            </Link>
             <h2 className="text-2xl font-bold text-[#333333] mb-1">Reset Password</h2>
             <p className="text-[#333333]/70">Enter your email to receive reset instructions</p>
           </div>

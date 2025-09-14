@@ -220,37 +220,52 @@ export default function SignUpPage() {
       >
       </div>
 
-      {/* Right Form Panel - Always scrollable */}
-      <div className="w-full lg:w-2/5 min-h-screen bg-white">
-        <div className="h-full overflow-y-auto">
-          <div className="w-full max-w-md mx-auto px-6 py-8 lg:px-8">
+      {/* Right Form Panel - Desktop: Fixed height, Mobile: scrollable */}
+      <div className="w-full lg:w-2/5 min-h-screen bg-white lg:overflow-hidden">
+        <div className="h-full lg:h-screen lg:flex lg:flex-col">
+          <div className="w-full max-w-md mx-auto px-6 py-4 lg:px-8 lg:py-6 lg:flex-1 lg:flex lg:flex-col lg:justify-center">
             {/* Mobile Brand Header */}
             <div className="lg:hidden text-center mb-6">
-              <Image 
-                src="https://iuea.ac.ug/sitepad-data/uploads/2020/11/Website-Logo.png" 
-                alt="IUEA Logo" 
-                width={128}
-                height={128}
-                className="w-32 h-32 mx-auto mb-3 object-contain"
-              />
+              <Link href="/" className="inline-block">
+                <Image 
+                  src="/small logo iuea.png" 
+                  alt="IUEA Logo" 
+                  width={96}
+                  height={96}
+                  className="w-24 h-24 mx-auto mb-3 object-contain hover:opacity-80 transition-opacity cursor-pointer"
+                />
+              </Link>
               <h1 className="text-xl font-bold text-[#333333] mb-2">Welcome to IUEA</h1>
               <p className="text-[#333333]/70 text-sm">Create your application portal account</p>
             </div>
 
-            {/* Desktop Header - Bigger Logo */}
-            <div className="hidden lg:block text-center mb-6">
-              <Image 
-                src="https://iuea.ac.ug/sitepad-data/uploads/2020/11/Website-Logo.png" 
-                alt="IUEA Logo" 
-                width={160}
-                height={160}
-                className="w-40 h-40 mx-auto mb-3 object-contain"
-              />
-              <h2 className="text-2xl font-bold text-[#333333] mb-1">Create Account</h2>
-              <p className="text-[#333333]/70">Join the IUEA student community</p>
+            {/* Desktop Header - Compact */}
+            <div className="hidden lg:block text-center mb-4">
+              <Link href="/" className="inline-block">
+                <Image 
+                  src="/small logo iuea.png" 
+                  alt="IUEA Logo" 
+                  width={80}
+                  height={80}
+                  className="w-20 h-20 mx-auto mb-2 object-contain hover:opacity-80 transition-opacity cursor-pointer"
+                />
+              </Link>
+              <h2 className="text-xl font-bold text-[#333333] mb-1">Create Account</h2>
+              <p className="text-[#333333]/70 text-sm">Join the IUEA student community</p>
             </div>
 
-            <form onSubmit={handleSubmit} className="space-y-4">{/* Increased spacing from space-y-3 to space-y-4 */}
+            <div className="lg:flex-1 lg:flex lg:flex-col lg:justify-center lg:max-h-[calc(100vh-200px)] lg:overflow-y-auto lg:scrollbar-hide">
+              {/* Custom CSS for hiding scrollbar */}
+              <style jsx>{`
+                .scrollbar-hide {
+                  -ms-overflow-style: none;
+                  scrollbar-width: none;
+                }
+                .scrollbar-hide::-webkit-scrollbar {
+                  display: none;
+                }
+              `}</style>
+              <form onSubmit={handleSubmit} className="space-y-3">{/* Reduced spacing from space-y-4 to space-y-3 */}
             {/* General Error Display */}
             {errors.general && (
               <div className="bg-red-100 border border-red-400 text-red-700 px-4 py-3 rounded-lg text-sm">
@@ -259,7 +274,7 @@ export default function SignUpPage() {
             )}
 
             {/* Name Fields */}
-            <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
               <div>
                 <label htmlFor="firstName" className="block text-sm font-medium text-[#333333] mb-1">
                   First Name
@@ -356,7 +371,7 @@ export default function SignUpPage() {
                   type="button"
                   onClick={handleWhatsAppVerification}
                   disabled={whatsappVerifying || !formData.whatsappNumber.trim() || whatsappVerified}
-                  className={`px-4 py-2 rounded-lg border-2 transition-colors whitespace-nowrap text-sm font-medium w-full sm:w-auto ${
+                  className={`px-3 py-2 rounded-lg border-2 transition-colors whitespace-nowrap text-xs font-medium w-full sm:w-auto ${
                     whatsappVerified 
                       ? 'border-green-500 bg-green-500 text-white cursor-not-allowed'
                       : whatsappVerifying
@@ -366,7 +381,7 @@ export default function SignUpPage() {
                 >
                   {whatsappVerifying ? (
                     <div className="flex items-center gap-2">
-                      <div className="w-4 h-4 border-2 border-current border-t-transparent rounded-full animate-spin"></div>
+                      <div className="w-3 h-3 border-2 border-current border-t-transparent rounded-full animate-spin"></div>
                       <span>Verifying...</span>
                     </div>
                   ) : whatsappVerified ? (
@@ -380,29 +395,22 @@ export default function SignUpPage() {
                 </button>
               </div>
               
-              <div className="mt-2 flex items-center justify-between">
-                {whatsappVerified && (
-                  <div className="flex items-center gap-1">
-                    <div className="w-4 h-4 flex items-center justify-center">
-                      <i className="ri-check-line text-green-600 text-sm"></i>
+              {/* Compact status messages */}
+              {(whatsappVerified || whatsappVerificationMessage) && (
+                <div className="mt-1 flex items-center justify-between">
+                  {whatsappVerified && (
+                    <div className="flex items-center gap-1">
+                      <i className="ri-check-line text-green-600 text-xs"></i>
+                      <span className="text-xs text-green-700">Verified</span>
                     </div>
-                    <span className="text-xs bg-green-100 text-green-700 px-2 py-1 rounded-full">
-                      Verified
-                    </span>
-                  </div>
-                )}
-                {whatsappVerificationMessage && (
-                  <div className={`text-xs px-2 py-1 rounded ${
-                    whatsappVerified 
-                      ? 'bg-green-100 text-green-700' 
-                      : 'bg-red-100 text-red-700'
-                  }`}>
-                    {whatsappVerificationMessage}
-                  </div>
-                )}
-              </div>
+                  )}
+                  {whatsappVerificationMessage && !whatsappVerified && (
+                    <span className="text-xs text-red-700">{whatsappVerificationMessage}</span>
+                  )}
+                </div>
+              )}
               <p className="mt-1 text-xs text-[#333333]/60">
-                We verify that your number is registered on WhatsApp before creating your account.
+                We verify that your number is registered on WhatsApp.
               </p>
               {errors.whatsappNumber && (
                 <p className="mt-1 text-xs text-red-600">{errors.whatsappNumber}</p>
@@ -438,7 +446,7 @@ export default function SignUpPage() {
 
               {/* Password Strength */}
               {formData.password && (
-                <div className="mt-2 space-y-1">
+                <div className="mt-1 space-y-1">
                   <div className="flex gap-1">
                     <div
                       className={`h-1 flex-1 rounded-full ${
@@ -446,11 +454,9 @@ export default function SignUpPage() {
                       }`}
                     />
                   </div>
-                  <div className="space-y-0.5 text-xs">
-                    <div className={`flex items-center gap-1 ${passwordRules.length ? 'text-green-600' : 'text-[#333333]/60'}`}>
-                      <i className={`ri-${passwordRules.length ? 'check' : 'close'}-line text-xs`}></i>
-                      <span>At least 6 characters</span>
-                    </div>
+                  <div className={`flex items-center gap-1 text-xs ${passwordRules.length ? 'text-green-600' : 'text-[#333333]/60'}`}>
+                    <i className={`ri-${passwordRules.length ? 'check' : 'close'}-line text-xs`}></i>
+                    <span>At least 6 characters</span>
                   </div>
                 </div>
               )}
@@ -481,12 +487,12 @@ export default function SignUpPage() {
             </button>
 
             {/* Trust Note */}
-            <p className="text-xs text-[#333333]/50 text-center">
+            <p className="text-xs text-[#333333]/50 text-center mt-2">
               IUEA is a fully chartered private university.
             </p>
 
             {/* Legal & Login Link */}
-            <div className="space-y-3 text-center pb-4">
+            <div className="space-y-2 text-center pb-2">
               <p className="text-xs text-[#333333]/60">
                 By creating an account, you agree to the{` `} 
                 <Link href="/terms" className="text-[#780000] hover:underline">
@@ -505,10 +511,11 @@ export default function SignUpPage() {
                 </Link>
               </p>
             </div>
-          </form>
+            </form>
+            </div>
+          </div>
         </div>
       </div>
-    </div>
     </div>
   );
 }
