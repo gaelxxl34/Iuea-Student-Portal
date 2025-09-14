@@ -45,7 +45,7 @@ export default function WelcomePage() {
           if (entry.isIntersecting && !hasAnimatedStats) {
             setHasAnimatedStats(true);
             // Animate counter numbers
-            stats.forEach((stat, index) => {
+            stats.forEach((stat) => {
               if (stat.count !== null) {
                 const element = document.querySelector(`[data-count="${stat.count}"]`);
                 if (element) {
