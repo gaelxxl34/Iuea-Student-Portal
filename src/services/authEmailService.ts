@@ -9,7 +9,8 @@ import {
   sendSignInLinkToEmail, 
   isSignInWithEmailLink, 
   signInWithEmailLink,
-  ActionCodeSettings 
+  ActionCodeSettings,
+  User
 } from 'firebase/auth';
 
 const API_BASE_URL = process.env.NEXT_PUBLIC_BACKEND_URL || "https://api.nyotafusionai.com";
@@ -265,7 +266,7 @@ class AuthEmailService {
   /**
    * Complete magic link sign-in
    */
-  async completeMagicLinkSignIn(url: string): Promise<{ success: boolean; user?: any; error?: string }> {
+  async completeMagicLinkSignIn(url: string): Promise<{ success: boolean; user?: User; error?: string }> {
     try {
       if (isSignInWithEmailLink(auth, url)) {
         let email = window.localStorage.getItem('emailForSignIn');

@@ -5,7 +5,6 @@ import Link from 'next/link';
 import Image from 'next/image';
 import { useRouter, useSearchParams } from 'next/navigation';
 import { useAuth } from '@/contexts/AuthContext';
-import { auth } from '@/lib/firebase';
 
 function LoginForm() {
   const router = useRouter();
@@ -77,10 +76,10 @@ function LoginForm() {
     return Object.keys(newErrors).length === 0;
   };
 
-  // Added: Type guard for FirebaseError shape
+  // Type guard for FirebaseError shape
   const getFirebaseErrorCode = (err: unknown): string | null => {
-    if (err && typeof err === 'object' && 'code' in err && typeof (err as any).code === 'string') {
-      return (err as any).code as string;
+    if (err && typeof err === 'object' && 'code' in err && typeof (err as { code: unknown }).code === 'string') {
+      return (err as { code: string }).code;
     }
     return null;
   };

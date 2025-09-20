@@ -472,7 +472,6 @@ export const sendPasswordReset = async (email: string): Promise<void> => {
     try {
       // Look up user by email to get their name
       // This is a basic lookup - you might want to implement a more efficient method
-      const usersCollection = collection(db, 'users');
       // Note: This would require creating an index in Firestore for email queries
       // For now, we'll use a generic name and improve this later
       userName = 'Student';

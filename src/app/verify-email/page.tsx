@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useEffect } from "react";
+import { useState, useEffect, Suspense } from "react";
 import Link from "next/link";
 import { useRouter, useSearchParams } from "next/navigation";
 import { useAuth } from "@/contexts/AuthContext";
@@ -8,7 +8,7 @@ import metaPixel from "@/lib/metaPixel";
 import { applyActionCode, reload, signOut } from "firebase/auth";
 import { auth } from "@/lib/firebase";
 
-export default function VerifyEmailPage() {
+function VerifyEmailForm() {
   const router = useRouter();
   const searchParams = useSearchParams();
   const { user, resendVerificationEmail, checkEmailVerification, refreshUser } = useAuth();
@@ -17,7 +17,6 @@ export default function VerifyEmailPage() {
   const [isChecking, setIsChecking] = useState(false);
   const [autoChecking, setAutoChecking] = useState(true);
   const [verifyingFromLink, setVerifyingFromLink] = useState(false);
-  const [linkVerificationMessage, setLinkVerificationMessage] = useState<string>("");
 
   useEffect(() => {
     // Track page view
@@ -28,7 +27,6 @@ export default function VerifyEmailPage() {
     const oobCode = searchParams?.get("oobCode");
     if (mode === "verifyEmail" && oobCode) {
       setVerifyingFromLink(true);
-      setLinkVerificationMessage("");
       (async () => {
         try {
           await applyActionCode(auth, oobCode);
@@ -52,7 +50,8 @@ export default function VerifyEmailPage() {
           return; // Stop further processing in this effect
         } catch (err) {
           console.error("Error applying email verification code:", err);
-          setLinkVerificationMessage("Failed to verify the link. It may have expired. Please request a new verification email.");
+          // Show error in resendMessage instead
+          setResendMessage("Failed to verify the link. It may have expired. Please request a new verification email.");
           setVerifyingFromLink(false);
         }
       })();
@@ -115,7 +114,7 @@ export default function VerifyEmailPage() {
         clearTimeout(stopAutoCheckTimeout);
       }
     };
-  }, [user, router, checkEmailVerification, refreshUser, autoChecking]);
+  }, [user, router, checkEmailVerification, refreshUser, autoChecking, searchParams]);
 
   const handleResendEmail = async () => {
     try {
@@ -257,5 +256,17 @@ export default function VerifyEmailPage() {
         </div>
       </div>
     </div>
+  );
+}
+
+export default function VerifyEmailPage() {
+  return (
+    <Suspense fallback={
+      <div className="min-h-screen bg-[#F7F7F7] flex items-center justify-center">
+        <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-[#780000]"></div>
+      </div>
+    }>
+      <VerifyEmailForm />
+    </Suspense>
   );
 }
