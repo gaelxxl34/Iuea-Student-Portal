@@ -1,26 +1,67 @@
-'use client';
+"use client";
 
-import { useState, useEffect } from 'react';
-import Link from 'next/link';
-import { useRouter } from 'next/navigation';
-import { useAuth } from '@/contexts/AuthContext';
-import metaPixel from '@/lib/metaPixel';
+import { useState, useEffect } from "react";
+import Link from "next/link";
+import { useRouter, useSearchParams } from "next/navigation";
+import { useAuth } from "@/contexts/AuthContext";
+import metaPixel from "@/lib/metaPixel";
+import { applyActionCode, reload, signOut } from "firebase/auth";
+import { auth } from "@/lib/firebase";
 
 export default function VerifyEmailPage() {
   const router = useRouter();
+  const searchParams = useSearchParams();
   const { user, resendVerificationEmail, checkEmailVerification, refreshUser } = useAuth();
   const [isResending, setIsResending] = useState(false);
-  const [resendMessage, setResendMessage] = useState('');
+  const [resendMessage, setResendMessage] = useState("");
   const [isChecking, setIsChecking] = useState(false);
   const [autoChecking, setAutoChecking] = useState(true);
+  const [verifyingFromLink, setVerifyingFromLink] = useState(false);
+  const [linkVerificationMessage, setLinkVerificationMessage] = useState<string>("");
 
   useEffect(() => {
     // Track page view
-    metaPixel.trackPageView('Email Verification Page');
+    metaPixel.trackPageView("Email Verification Page");
+
+    // 1) If arrived with Firebase action code in URL, process it first before any redirects
+    const mode = searchParams?.get("mode");
+    const oobCode = searchParams?.get("oobCode");
+    if (mode === "verifyEmail" && oobCode) {
+      setVerifyingFromLink(true);
+      setLinkVerificationMessage("");
+      (async () => {
+        try {
+          await applyActionCode(auth, oobCode);
+          // Refresh current user if signed in to reflect verified status
+          if (auth.currentUser) {
+            await reload(auth.currentUser);
+            await refreshUser();
+          }
+          // Track verification
+          const verifiedEmail = auth.currentUser?.email || searchParams?.get("email") || "";
+          if (verifiedEmail) {
+            metaPixel.trackEmailVerification(verifiedEmail);
+          }
+          // Always redirect to login after verification; sign out if currently signed in
+          try {
+            if (auth.currentUser) {
+              await signOut(auth);
+            }
+          } catch {}
+          router.replace("/login?verified=1");
+          return; // Stop further processing in this effect
+        } catch (err) {
+          console.error("Error applying email verification code:", err);
+          setLinkVerificationMessage("Failed to verify the link. It may have expired. Please request a new verification email.");
+          setVerifyingFromLink(false);
+        }
+      })();
+      return; // Don't run the rest of the effect while handling link
+    }
 
     // If user is not logged in, redirect to login
     if (user === null) {
-      router.push('/login');
+      router.push("/login");
       return;
     }
 
@@ -36,7 +77,7 @@ export default function VerifyEmailPage() {
     const checkInterval = setInterval(async () => {
       if (user && autoChecking) {
         try {
-          // First refresh the user to get latest status from Firebase
+        // First refresh the user to get latest status from Firebase
           await refreshUser();
           
           // Then check verification
@@ -48,7 +89,7 @@ export default function VerifyEmailPage() {
             // 🎯 TRACK EMAIL VERIFICATION TO META
             if (user?.email) {
               metaPixel.trackEmailVerification(user.email);
-              console.log('🎯 Meta Pixel: Email verification tracked for', user.email);
+              console.log("🎯 Meta Pixel: Email verification tracked for", user.email);
             }
             
             router.push('/dashboard');
@@ -79,17 +120,17 @@ export default function VerifyEmailPage() {
   const handleResendEmail = async () => {
     try {
       setIsResending(true);
-      setResendMessage('');
+      setResendMessage("");
       await resendVerificationEmail();
-      setResendMessage('Verification email sent successfully! Please check your inbox.');
+      setResendMessage("Verification email sent successfully! Please check your inbox.");
     } catch (error: unknown) {
-      console.error('Error resending verification email:', error);
-      const errorMessage = error instanceof Error ? error.message : 'Unknown error';
-      if (errorMessage === 'Email is already verified') {
-        setResendMessage('Your email is already verified!');
-        router.push('/dashboard');
+      console.error("Error resending verification email:", error);
+      const errorMessage = error instanceof Error ? error.message : "Unknown error";
+      if (errorMessage === "Email is already verified") {
+        setResendMessage("Your email is already verified!");
+        router.push("/dashboard");
       } else {
-        setResendMessage('Failed to send verification email. Please try again.');
+        setResendMessage("Failed to send verification email. Please try again.");
       }
     } finally {
       setIsResending(false);
@@ -104,20 +145,20 @@ export default function VerifyEmailPage() {
       // Then check verification
       const isVerified = await checkEmailVerification();
       if (isVerified) {
-        router.push('/dashboard');
+        router.push("/dashboard");
       } else {
-        setResendMessage('Email is not yet verified. Please check your email and click the verification link.');
+        setResendMessage("Email is not yet verified. Please check your email and click the verification link.");
       }
     } catch (error) {
-      console.error('Error checking verification status:', error);
-      setResendMessage('Failed to check verification status. Please try again.');
+      console.error("Error checking verification status:", error);
+      setResendMessage("Failed to check verification status. Please try again.");
     } finally {
       setIsChecking(false);
     }
   };
 
   // Don't render anything while user state is loading
-  if (user === null) {
+  if (user === null && !verifyingFromLink) {
     return (
       <div className="min-h-screen bg-[#F7F7F7] flex items-center justify-center">
         <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-[#780000]"></div>
@@ -134,9 +175,17 @@ export default function VerifyEmailPage() {
         
         <h2 className="text-2xl font-bold text-[#333333] mb-2">Verify Your Email</h2>
         
-        <p className="text-[#333333]/70 mb-6">
-          Please check your email at <strong>{user?.email}</strong> and click the verification link to activate your account.
-        </p>
+        {verifyingFromLink ? (
+          <div className="flex items-center justify-center mb-6">
+            <div className="w-6 h-6 border-2 border-[#780000] border-t-transparent rounded-full animate-spin"></div>
+          </div>
+        ) : (
+          <p className="text-[#333333]/70 mb-6">
+            Please check your email{user?.email ? (
+              <> at <strong>{user.email}</strong></>
+            ) : null} and click the verification link to activate your account.
+          </p>
+        )}
 
         {autoChecking && (
           <div className="mb-4 p-3 bg-blue-50 border border-blue-200 rounded-lg">
@@ -158,6 +207,7 @@ export default function VerifyEmailPage() {
         )}
 
         <div className="space-y-3">
+          {!verifyingFromLink && (
           <button
             onClick={handleCheckVerification}
             disabled={isChecking}
@@ -172,7 +222,9 @@ export default function VerifyEmailPage() {
               'I\'ve verified my email'
             )}
           </button>
+          )}
 
+          {!verifyingFromLink && (
           <button
             onClick={handleResendEmail}
             disabled={isResending}
@@ -187,17 +239,20 @@ export default function VerifyEmailPage() {
               'Resend verification email'
             )}
           </button>
+          )}
 
           <div className="pt-4 border-t border-gray-200">
             <p className="text-sm text-[#333333]/60 mb-3">
               Didn&apos;t receive the email? Check your spam folder.
             </p>
-            <Link 
-              href="/login" 
-              className="text-[#780000] hover:underline text-sm font-medium"
-            >
-              Back to Login
-            </Link>
+            {!verifyingFromLink && (
+              <Link 
+                href="/login" 
+                className="text-[#780000] hover:underline text-sm font-medium"
+              >
+                Back to Login
+              </Link>
+            )}
           </div>
         </div>
       </div>

@@ -171,7 +171,7 @@ export default function WelcomePage() {
                 </Link>
               </div>
               
-              {/* Right: Create Account + yellow ping dot */}
+              {/* Right: Start Application + yellow ping dot */}
               <div className="relative">
                 <span className="absolute -top-2 -right-2 h-4 w-4 rounded-full bg-amber-400 ring-2 ring-white shadow"></span>
                 <span className="absolute -top-2 -right-2 h-4 w-4 rounded-full bg-amber-400 opacity-75 animate-ping"></span>
@@ -184,8 +184,8 @@ export default function WelcomePage() {
                     burstConfetti(rect.left + rect.width / 2, rect.top + window.scrollY);
                   }}
                 >
-                  <span className="hidden sm:inline">Create Account</span>
-                  <span className="sm:hidden">Sign Up</span>
+                  <span className="hidden sm:inline">Start Application</span>
+                  <span className="sm:hidden">Apply</span>
                   <svg xmlns="http://www.w3.org/2000/svg" className="h-4 w-4" viewBox="0 0 24 24" fill="none" stroke="currentColor">
                     <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M13 7l5 5-5 5M6 12h12"/>
                   </svg>
@@ -205,14 +205,14 @@ export default function WelcomePage() {
         <div className="mx-auto max-w-7xl px-4 sm:px-6 lg:px-8 pt-6 lg:pt-10 pb-10 lg:pb-16 grid lg:grid-cols-2 gap-10 items-center">
           <div>
             <span className="inline-flex items-center gap-2 rounded-lg border bg-white/80 px-3 py-1 text-xs text-neutral-600 shadow-soft animate-fadeUp">
-              <span className="h-2 w-2 rounded-full bg-amber-500"></span> Welcome to IUEA • Applicant Portal
+              <span className="h-2 w-2 rounded-full bg-green-500"></span> Quick & Easy Application • 5 Minutes
             </span>
             <h1 className="mt-4 text-5xl sm:text-6xl font-black leading-tight tracking-tight">
-              <span className="block">Welcome to Your</span>
-              <span className="block bg-gradient-to-r from-red-900 via-red-800 to-amber-600 bg-clip-text text-transparent">Application Portal</span>
+              <span className="block">Apply to IUEA</span>
+              <span className="block bg-gradient-to-r from-red-900 via-red-800 to-amber-600 bg-clip-text text-transparent">In Minutes</span>
             </h1>
             <p className="mt-4 text-lg text-neutral-600 animate-fadeUp" style={{animationDelay: '0.1s'}}>
-              Ready to join <strong>15,000+ students</strong> at East Africa&apos;s premier university? Start your application journey today and unlock world‑class education opportunities at IUEA.
+              Start your university application today. <strong>Simple, fast, and straightforward.</strong> Join 15,000+ students at East Africa&apos;s premier university.
             </p>
 
             <div className="mt-8 flex flex-col sm:flex-row gap-3">
@@ -226,8 +226,8 @@ export default function WelcomePage() {
               >
                 <span className="relative overflow-hidden">
                   <span className="absolute inset-0 -z-10 opacity-0 group-hover:opacity-100 transition rounded-lg bg-gradient-to-r from-amber-400/40 to-transparent"></span>
-                  <span className="hidden sm:inline">Create Account</span>
-                  <span className="sm:hidden">Sign Up</span>
+                  <span className="hidden sm:inline">Start Application</span>
+                  <span className="sm:hidden">Apply Now</span>
                 </span>
                 <svg className="h-5 w-5 transition-transform group-hover:translate-x-1" fill="none" stroke="currentColor" strokeWidth="1.8" viewBox="0 0 24 24">
                   <path strokeLinecap="round" strokeLinejoin="round" d="M13 7l5 5m0 0l-5 5m5-5H6"/>
@@ -241,7 +241,7 @@ export default function WelcomePage() {
                   <path strokeLinecap="round" strokeLinejoin="round" d="M15.75 9V5.25A2.25 2.25 0 0013.5 3h-9A2.25 2.25 0 002.25 5.25v13.5A2.25 2.25 0 004.5 21h9a2.25 2.25 0 002.25-2.25V15"/>
                   <path strokeLinecap="round" strokeLinejoin="round" d="M12 9l6 3-6 3V9z"/>
                 </svg>
-                Applicant Login
+                Continue Application
               </Link>
             </div>
 

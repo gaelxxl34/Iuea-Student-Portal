@@ -10,6 +10,7 @@ import {
 import { doc, setDoc, getDoc, collection, addDoc, updateDoc } from 'firebase/firestore';
 import { auth, db } from './firebase';
 import { studentApplicationService } from './applicationService';
+import authEmailService from '../services/authEmailService';
 
 // Lead status constants (matching backend)
 const LEAD_STATUSES = {
@@ -270,9 +271,45 @@ export const signUpWithEmail = async (
     // Create lead from signup with submittedBy info
     await createLeadFromSignup(user, firstName, lastName, email, whatsappNumber, submittedBy);
     
-    // Send email verification
-    await sendEmailVerification(user);
-    console.log('✅ Email verification sent');
+    // Send custom branded welcome email instead of Firebase's default
+    try {
+      console.log('📧 Sending custom branded welcome email...');
+      const welcomeResult = await authEmailService.sendWelcomeEmail({
+        email: user.email || email,
+        userName: `${firstName} ${lastName}`,
+      });
+      
+      if (welcomeResult.success) {
+        console.log('✅ Custom welcome email sent successfully');
+      } else {
+        console.warn('⚠️ Custom welcome email failed:', welcomeResult.error);
+      }
+    } catch (emailError) {
+      console.warn('⚠️ Welcome email error:', emailError);
+    }
+
+    // Send custom branded email verification instead of Firebase's default
+    try {
+      console.log('📧 Sending custom branded email verification...');
+      const verificationResult = await authEmailService.sendCustomEmailVerification({
+        email: user.email || email,
+        userName: `${firstName} ${lastName}`,
+      });
+      
+      if (verificationResult.success) {
+        console.log('✅ Custom email verification sent successfully');
+      } else {
+        console.warn('⚠️ Custom email verification failed:', verificationResult.error);
+        // Fallback to Firebase's default email verification if custom fails
+        await sendEmailVerification(user);
+        console.log('✅ Fallback Firebase email verification sent');
+      }
+    } catch (emailError) {
+      console.warn('⚠️ Email verification error, using Firebase fallback:', emailError);
+      // Fallback to Firebase's default email verification
+      await sendEmailVerification(user);
+      console.log('✅ Fallback Firebase email verification sent');
+    }
     
     return user;
     
@@ -345,7 +382,7 @@ export const updateUserData = async (uid: string, data: Partial<UserData>): Prom
   }
 };
 
-// Resend email verification
+// Resend email verification with custom branded email
 export const resendEmailVerification = async (): Promise<void> => {
   try {
     const user = auth.currentUser;
@@ -356,8 +393,34 @@ export const resendEmailVerification = async (): Promise<void> => {
     if (user.emailVerified) {
       throw new Error('Email is already verified');
     }
-    
-    await sendEmailVerification(user);
+
+    // Get user data to personalize the email
+    const userData = await getUserData(user.uid);
+    const userName = userData 
+      ? `${userData.firstName} ${userData.lastName}`.trim() 
+      : 'Student';
+
+    // Try to send custom branded email verification first
+    try {
+      console.log('📧 Resending custom branded email verification...');
+      const verificationResult = await authEmailService.sendCustomEmailVerification({
+        email: user.email || '',
+        userName: userName,
+      });
+      
+      if (verificationResult.success) {
+        console.log('✅ Custom email verification resent successfully');
+        return;
+      } else {
+        console.warn('⚠️ Custom email verification failed:', verificationResult.error);
+        throw new Error(verificationResult.error);
+      }
+    } catch (customEmailError) {
+      console.warn('⚠️ Custom email verification failed, using Firebase fallback:', customEmailError);
+      // Fallback to Firebase's default email verification
+      await sendEmailVerification(user);
+      console.log('✅ Fallback Firebase email verification sent');
+    }
   } catch (error) {
     console.error('Error resending verification email:', error);
     throw error;
@@ -401,10 +464,43 @@ export const signInUnverified = async (email: string, password: string): Promise
   }
 };
 
-// Send password reset email
+// Send custom branded password reset email
 export const sendPasswordReset = async (email: string): Promise<void> => {
   try {
-    await sendPasswordResetEmail(auth, email);
+    // Try to get user data to personalize the email
+    let userName = 'Student';
+    try {
+      // Look up user by email to get their name
+      // This is a basic lookup - you might want to implement a more efficient method
+      const usersCollection = collection(db, 'users');
+      // Note: This would require creating an index in Firestore for email queries
+      // For now, we'll use a generic name and improve this later
+      userName = 'Student';
+    } catch (lookupError) {
+      console.warn('Could not lookup user name for password reset:', lookupError);
+    }
+
+    // Try to send custom branded password reset email first
+    try {
+      console.log('📧 Sending custom branded password reset email...');
+      const resetResult = await authEmailService.sendCustomPasswordReset({
+        email: email,
+        userName: userName,
+      });
+      
+      if (resetResult.success) {
+        console.log('✅ Custom password reset email sent successfully');
+        return;
+      } else {
+        console.warn('⚠️ Custom password reset failed:', resetResult.error);
+        throw new Error(resetResult.error);
+      }
+    } catch (customEmailError) {
+      console.warn('⚠️ Custom password reset failed, using Firebase fallback:', customEmailError);
+      // Fallback to Firebase's default password reset email
+      await sendPasswordResetEmail(auth, email);
+      console.log('✅ Fallback Firebase password reset sent');
+    }
   } catch (error) {
     console.error('Error sending password reset email:', error);
     throw error;

@@ -5,6 +5,7 @@ import Link from 'next/link';
 import Image from 'next/image';
 import { useRouter, useSearchParams } from 'next/navigation';
 import { useAuth } from '@/contexts/AuthContext';
+import { auth } from '@/lib/firebase';
 
 function LoginForm() {
   const router = useRouter();
@@ -30,8 +31,12 @@ function LoginForm() {
   useEffect(() => {
     // Check for success messages from URL params
     const message = searchParams.get('message');
+    const verified = searchParams.get('verified');
     if (message === 'password-reset-success') {
       setSuccessMessage('Password reset successful! You can now log in with your new password.');
+    }
+    if (verified === '1') {
+      setSuccessMessage('Your email has been verified. You can now sign in.');
     }
   }, [searchParams]);
 
@@ -72,6 +77,14 @@ function LoginForm() {
     return Object.keys(newErrors).length === 0;
   };
 
+  // Added: Type guard for FirebaseError shape
+  const getFirebaseErrorCode = (err: unknown): string | null => {
+    if (err && typeof err === 'object' && 'code' in err && typeof (err as any).code === 'string') {
+      return (err as any).code as string;
+    }
+    return null;
+  };
+
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     
@@ -82,9 +95,11 @@ function LoginForm() {
     setIsSubmitting(true);
     setErrors({});
 
+    const emailInput = formData.email.trim();
+
     try {
-      // Try to sign in the user
-      await signInUnverified(formData.email, formData.password);
+      // Try to sign in the user directly - let Firebase handle the authentication
+      await signInUnverified(emailInput, formData.password);
       
       // After successful authentication, check if email is verified
       const { checkEmailVerification } = await import('@/lib/auth');
@@ -99,18 +114,27 @@ function LoginForm() {
       }
     } catch (error: unknown) {
       console.error('Login error:', error);
+
+      // Let Firebase determine the exact error - just handle the specific cases we know
+      const code = getFirebaseErrorCode(error);
       
-      const errorMessage = error instanceof Error ? error.message : 'Unknown error';
-      if (errorMessage.includes('auth/user-not-found')) {
+      // Handle specific Firebase error codes
+      if (code === 'auth/user-not-found') {
         setErrors({ email: 'No account found with this email address' });
-      } else if (errorMessage.includes('auth/wrong-password')) {
-        setErrors({ password: 'Incorrect password' });
-      } else if (errorMessage.includes('auth/invalid-email')) {
+      } else if (code === 'auth/wrong-password') {
+        setErrors({ password: 'Incorrect password. Please check your password and try again.' });
+      } else if (code === 'auth/invalid-email') {
         setErrors({ email: 'Invalid email address' });
-      } else if (errorMessage.includes('auth/too-many-requests')) {
+      } else if (code === 'auth/user-disabled') {
+        setErrors({ general: 'This account has been disabled. Please contact support.' });
+      } else if (code === 'auth/too-many-requests') {
         setErrors({ general: 'Too many failed attempts. Please try again later.' });
       } else {
-        setErrors({ general: 'Failed to sign in. Please try again.' });
+        // For any other error (including invalid-credential, invalid-login-credentials), 
+        // show a generic message and log the actual error for debugging
+        console.log('Unhandled auth error code:', code);
+        console.log('Full error:', error);
+        setErrors({ general: 'Login failed. Please check your email and password and try again.' });
       }
     } finally {
       setIsSubmitting(false);
