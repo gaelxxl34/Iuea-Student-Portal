@@ -119,12 +119,12 @@ export const useMultipleDocumentAccess = (
 export const useApplicationDocuments = (application: {
   id: string;
   passportPhoto?: string;
-  academicDocuments?: string;
+  academicDocuments?: string | string[];
   identificationDocument?: string;
 }) => {
   const [documents, setDocuments] = useState<{
     passportPhotoUrl?: string;
-    academicDocumentsUrl?: string;
+    academicDocumentsUrls?: string[];
     identificationDocumentUrl?: string;
   }>({});
   const [loading, setLoading] = useState(false);
@@ -145,7 +145,7 @@ export const useApplicationDocuments = (application: {
 
       const urls: {
         passportPhotoUrl?: string;
-        academicDocumentsUrl?: string;
+        academicDocumentsUrls?: string[];
         identificationDocumentUrl?: string;
       } = {};
 
@@ -158,10 +158,20 @@ export const useApplicationDocuments = (application: {
       }
 
       if (application.academicDocuments) {
-        urls.academicDocumentsUrl = await documentAccessService.getDocumentUrl(
-          application.academicDocuments,
-          { usePublicUrl: true }
-        );
+        if (Array.isArray(application.academicDocuments)) {
+          // Handle multiple academic documents
+          const urlPromises = application.academicDocuments.map(doc => 
+            documentAccessService.getDocumentUrl(doc, { usePublicUrl: true })
+          );
+          urls.academicDocumentsUrls = await Promise.all(urlPromises);
+        } else {
+          // Handle single academic document (backward compatibility)
+          const singleUrl = await documentAccessService.getDocumentUrl(
+            application.academicDocuments,
+            { usePublicUrl: true }
+          );
+          urls.academicDocumentsUrls = [singleUrl];
+        }
       }
 
       if (application.identificationDocument) {

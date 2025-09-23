@@ -284,7 +284,7 @@ export default function SignUpPage() {
                   id="firstName"
                   value={formData.firstName}
                   onChange={(e) => handleInputChange('firstName', e.target.value)}
-                  className={`w-full px-3 py-2 rounded-lg border-2 transition-colors text-sm placeholder:text-gray-400 text-black ${
+                  className={`w-full px-3 py-2 rounded-lg border-2 transition-colors text-base placeholder:text-gray-400 text-black ${
                     errors.firstName 
                       ? 'border-red-500 focus:border-red-500' 
                       : 'border-[#EDEDED] focus:border-[#780000]'
@@ -305,7 +305,7 @@ export default function SignUpPage() {
                   id="lastName"
                   value={formData.lastName}
                   onChange={(e) => handleInputChange('lastName', e.target.value)}
-                  className={`w-full px-3 py-2 rounded-lg border-2 transition-colors text-sm placeholder:text-gray-400 text-black ${
+                  className={`w-full px-3 py-2 rounded-lg border-2 transition-colors text-base placeholder:text-gray-400 text-black ${
                     errors.lastName 
                       ? 'border-red-500 focus:border-red-500' 
                       : 'border-[#EDEDED] focus:border-[#780000]'
@@ -328,7 +328,7 @@ export default function SignUpPage() {
                 id="email"
                 value={formData.email}
                 onChange={(e) => handleInputChange('email', e.target.value)}
-                className={`w-full px-3 py-2 rounded-lg border-2 transition-colors text-sm placeholder:text-gray-400 text-black ${
+                className={`w-full px-3 py-2 rounded-lg border-2 transition-colors text-base placeholder:text-gray-400 text-black ${
                   errors.email 
                     ? 'border-red-500 focus:border-red-500' 
                     : 'border-[#EDEDED] focus:border-[#780000]'
@@ -353,7 +353,7 @@ export default function SignUpPage() {
                     defaultCountry="UG"
                     value={formData.whatsappNumber}
                     onChange={(value) => handleInputChange('whatsappNumber', value || '')}
-                    className={`w-full px-3 py-2 rounded-lg border-2 transition-colors text-sm bg-white ${
+                    className={`w-full px-3 py-2 rounded-lg border-2 transition-colors text-base bg-white ${
                       errors.whatsappNumber 
                         ? 'border-red-500 focus-within:border-red-500' 
                         : 'border-[#EDEDED] focus-within:border-[#780000]'
@@ -364,6 +364,12 @@ export default function SignUpPage() {
                       '--PhoneInputCountryFlag-width': '1.5em',
                       '--PhoneInputCountrySelectArrow-color': '#000000',
                       '--PhoneInputCountrySelectArrow-opacity': '0.8',
+                    }}
+                    inputStyle={{
+                      fontSize: '16px',
+                      border: 'none',
+                      outline: 'none',
+                      background: 'transparent'
                     }}
                   />
                 </div>
@@ -428,7 +434,7 @@ export default function SignUpPage() {
                   id="password"
                   value={formData.password}
                   onChange={(e) => handleInputChange('password', e.target.value)}
-                  className={`w-full px-3 py-2 pr-10 rounded-lg border-2 transition-colors text-sm placeholder:text-gray-400 text-black ${
+                  className={`w-full px-3 py-2 pr-10 rounded-lg border-2 transition-colors text-base placeholder:text-gray-400 text-black ${
                     errors.password 
                       ? 'border-red-500 focus:border-red-500' 
                       : 'border-[#EDEDED] focus:border-[#780000]'

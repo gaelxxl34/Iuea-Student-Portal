@@ -210,7 +210,7 @@ export default function ForgotPasswordPage() {
                     setErrors(prev => ({ ...prev, email: '' }));
                   }
                 }}
-                className={`w-full px-3 py-2 rounded-lg border-2 transition-colors text-sm placeholder:text-gray-400 text-black ${
+                className={`w-full px-3 py-2 rounded-lg border-2 transition-colors text-base placeholder:text-gray-400 text-black ${
                   errors.email 
                     ? 'border-red-500 focus:border-red-500' 
                     : 'border-[#EDEDED] focus:border-[#780000]'

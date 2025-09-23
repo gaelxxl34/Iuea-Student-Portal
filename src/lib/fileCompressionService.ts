@@ -322,17 +322,17 @@ export const fileCompressionService = FileCompressionService.getInstance();
 export const compressApplicationDocuments = async (files: {
   passportPhoto?: File;
   academicDocuments?: File[];
-  identificationDocuments?: File[];
+  identificationDocument?: File; // Changed from array to single file
 }): Promise<{
   passportPhoto?: File;
   academicDocuments: File[];
-  identificationDocuments: File[];
+  identificationDocument?: File; // Changed from array to single file
   compressionResults: CompressionResult[];
 }> => {
   console.log('🗜️ Starting file compression...', { 
     hasPassportPhoto: !!files.passportPhoto,
     academicDocsCount: Array.isArray(files.academicDocuments) ? files.academicDocuments.length : 0,
-    identificationDocsCount: Array.isArray(files.identificationDocuments) ? files.identificationDocuments.length : 0
+    hasIdentificationDocument: !!files.identificationDocument
   });
 
   const allFiles: File[] = [];
@@ -345,16 +345,16 @@ export const compressApplicationDocuments = async (files: {
   const academicDocs = Array.isArray(files.academicDocuments) ? files.academicDocuments : [];
   allFiles.push(...academicDocs);
   
-  // Safely handle identificationDocuments array
-  const identificationDocs = Array.isArray(files.identificationDocuments) ? files.identificationDocuments : [];
-  allFiles.push(...identificationDocs);
+  // Handle single identificationDocument
+  if (files.identificationDocument) {
+    allFiles.push(files.identificationDocument);
+  }
 
   // Early return if no files to compress
   if (allFiles.length === 0) {
     console.log('ℹ️ No files to compress, returning empty results');
     return {
       academicDocuments: [],
-      identificationDocuments: [],
       compressionResults: []
     };
   }
@@ -368,10 +368,9 @@ export const compressApplicationDocuments = async (files: {
   const compressedFiles: {
     passportPhoto?: File;
     academicDocuments: File[];
-    identificationDocuments: File[];
+    identificationDocument?: File;
   } = {
-    academicDocuments: [],
-    identificationDocuments: []
+    academicDocuments: []
   };
 
   if (files.passportPhoto && results[fileIndex]) {
@@ -386,11 +385,9 @@ export const compressApplicationDocuments = async (files: {
     }
   }
 
-  for (let i = 0; i < identificationDocs.length; i++) {
-    if (results[fileIndex]) {
-      compressedFiles.identificationDocuments.push(results[fileIndex].file);
-      fileIndex++;
-    }
+  if (files.identificationDocument && results[fileIndex]) {
+    compressedFiles.identificationDocument = results[fileIndex].file;
+    fileIndex++;
   }
 
   console.log('✅ File compression completed', {
@@ -398,7 +395,7 @@ export const compressApplicationDocuments = async (files: {
     compressedFiles: results.length,
     passportPhoto: !!compressedFiles.passportPhoto,
     academicDocuments: compressedFiles.academicDocuments.length,
-    identificationDocuments: compressedFiles.identificationDocuments.length
+    identificationDocument: !!compressedFiles.identificationDocument
   });
 
   return {

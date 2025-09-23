@@ -6,6 +6,7 @@ import WhatsAppVerificationService from '@/lib/whatsapp-verification';
 import { useAuth } from '@/contexts/AuthContext';
 import { createAbsoluteUrl } from '@/config/app.config';
 import metaPixel from '@/lib/metaPixel';
+import { googleTagManager } from '@/lib/googleTagManager';
 
 export default function EmbedSignUpPage() {
   const { signUp } = useAuth();
@@ -200,6 +201,16 @@ export default function EmbedSignUpPage() {
 
       console.log('🎯 Meta Pixel: Embed signup conversion tracked for', formData.email);
 
+      // 🎯 TRACK SIGNUP CONVERSION TO GOOGLE ADS
+      googleTagManager.trackSignup({
+        email: formData.email,
+        firstName: formData.firstName,
+        lastName: formData.lastName,
+        phone: formData.whatsappNumber
+      });
+
+      console.log('🎯 Google Tag Manager: Embed signup conversion tracked for', formData.email);
+
       // Show email verification message
       setEmailSent(true);
       
@@ -296,7 +307,7 @@ export default function EmbedSignUpPage() {
               id="firstName"
               value={formData.firstName}
               onChange={(e) => handleInputChange('firstName', e.target.value)}
-              className={`w-full px-3 py-2 border-2 transition-colors text-sm placeholder:text-gray-400 text-black ${
+                            className={`w-full px-3 py-2 border-2 transition-colors text-base placeholder:text-gray-400 text-black ${
                 errors.firstName 
                   ? 'border-red-500 focus:border-red-500' 
                   : 'border-[#EDEDED] focus:border-[#780000]'
@@ -317,7 +328,7 @@ export default function EmbedSignUpPage() {
               id="lastName"
               value={formData.lastName}
               onChange={(e) => handleInputChange('lastName', e.target.value)}
-              className={`w-full px-3 py-2 border-2 transition-colors text-sm placeholder:text-gray-400 text-black ${
+              className={`w-full px-3 py-2 border-2 transition-colors text-base placeholder:text-gray-400 text-black ${
                 errors.lastName 
                   ? 'border-red-500 focus:border-red-500' 
                   : 'border-[#EDEDED] focus:border-[#780000]'
@@ -340,7 +351,7 @@ export default function EmbedSignUpPage() {
             id="email"
             value={formData.email}
             onChange={(e) => handleInputChange('email', e.target.value)}
-            className={`w-full px-3 py-2 border-2 transition-colors text-sm placeholder:text-gray-400 text-black ${
+            className={`w-full px-3 py-2 border-2 transition-colors text-base placeholder:text-gray-400 text-black ${
               errors.email 
                 ? 'border-red-500 focus:border-red-500' 
                 : 'border-[#EDEDED] focus:border-[#780000]'
@@ -365,7 +376,7 @@ export default function EmbedSignUpPage() {
                 defaultCountry="UG"
                 value={formData.whatsappNumber}
                 onChange={(value) => handleInputChange('whatsappNumber', value || '')}
-                className={`w-full px-3 py-2 border-2 transition-colors text-sm bg-white ${
+                className={`w-full px-3 py-2 border-2 transition-colors text-base bg-white ${
                   errors.whatsappNumber 
                     ? 'border-red-500 focus-within:border-red-500' 
                     : 'border-[#EDEDED] focus-within:border-[#780000]'
@@ -377,13 +388,19 @@ export default function EmbedSignUpPage() {
                   '--PhoneInputCountrySelectArrow-color': '#000000',
                   '--PhoneInputCountrySelectArrow-opacity': '0.8',
                 }}
+                inputStyle={{
+                  fontSize: '16px',
+                  border: 'none',
+                  outline: 'none',
+                  background: 'transparent'
+                }}
               />
             </div>
             <button
               type="button"
               onClick={handleWhatsAppVerification}
               disabled={whatsappVerifying || !formData.whatsappNumber.trim() || whatsappVerified}
-              className={`px-3 py-2 border-2 transition-colors whitespace-nowrap text-sm font-medium ${
+              className={`px-3 py-2 border-2 transition-colors whitespace-nowrap text-base font-medium ${
                 whatsappVerified 
                   ? 'border-green-500 bg-green-500 text-white cursor-not-allowed'
                   : whatsappVerifying
@@ -434,7 +451,7 @@ export default function EmbedSignUpPage() {
               id="password"
               value={formData.password}
               onChange={(e) => handleInputChange('password', e.target.value)}
-              className={`w-full px-3 py-2 pr-10 border-2 transition-colors text-sm placeholder:text-gray-400 text-black ${
+              className={`w-full px-3 py-2 pr-10 border-2 transition-colors text-base placeholder:text-gray-400 text-black ${
                 errors.password 
                   ? 'border-red-500 focus:border-red-500' 
                   : 'border-[#EDEDED] focus:border-[#780000]'

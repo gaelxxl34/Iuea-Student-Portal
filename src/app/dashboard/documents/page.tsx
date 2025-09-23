@@ -8,16 +8,45 @@ import { studentApplicationService, Application } from '@/lib/applicationService
 import { useApplicationDocuments } from '@/hooks/useDocumentAccess';
 import { useFileUpload } from '@/hooks/useFileUpload';
 import { DocumentsSkeleton } from '@/components/skeletons/DocumentsSkeleton';
+import { ToastContainer, useToast } from '@/components/Toast';
+
+// Document info interface for type safety
+interface DocumentInfo {
+  name: string;
+  description: string;
+  fileTypes: string;
+  maxSize: string;
+  isRequired: boolean;
+  uploadedUrl?: string;
+  uploadedUrls?: string[];
+  hasDocument: boolean;
+  documentCount?: number;
+}
+
+// Academic document info extends base document info
+interface AcademicDocumentInfo extends DocumentInfo {
+  uploadedUrls: string[];
+  documentCount: number;
+}
+
+// Single document info extends base document info
+interface SingleDocumentInfo extends DocumentInfo {
+  uploadedUrl: string;
+}
 
 export default function DocumentsPage() {
   const { user } = useAuth();
+  const { toasts, removeToast, showSuccess, showError } = useToast();
   const [applications, setApplications] = useState<Application[]>([]);
   const [selectedApplication, setSelectedApplication] = useState<Application | null>(null);
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  const [manualUploading, setManualUploading] = useState(false);
+  const [manualUploadError, setManualUploadError] = useState<string | null>(null);
+  const [deletingDocUrl, setDeletingDocUrl] = useState<string | null>(null);
 
   // File upload hook
-  const { uploading, progress, error: uploadError, uploadApplicationDocument, reset } = useFileUpload({
+  const { uploading, progress, error: uploadError, /* uploadApplicationDocument, */ reset } = useFileUpload({
     maxSizeInMB: 10,
     onSuccess: (result) => {
       console.log('Document uploaded successfully:', result);
@@ -29,21 +58,35 @@ export default function DocumentsPage() {
     }
   });
 
+  // Unified uploading/error flags for UI
+  const isUploading = uploading || manualUploading;
+  const combinedUploadError = uploadError || manualUploadError;
+
   // Create stable application object for the hook
   const stableApplication = useMemo(() => {
     return {
       id: selectedApplication?.id || '',
       passportPhoto: selectedApplication?.passportPhoto || '',
-      academicDocuments: selectedApplication?.academicDocuments || '',
+      academicDocuments: Array.isArray(selectedApplication?.academicDocuments) 
+        ? selectedApplication.academicDocuments 
+        : (selectedApplication?.academicDocuments ? [selectedApplication.academicDocuments] : []),
       identificationDocument: selectedApplication?.identificationDocument || ''
     };
   }, [selectedApplication]);
 
   // Document access hook for selected application - only when we have a valid application
   const shouldFetchDocuments = Boolean(selectedApplication?.id);
-  const { documents, loading: documentsLoading, refetch } = useApplicationDocuments(
-    shouldFetchDocuments ? stableApplication : { id: '', passportPhoto: '', academicDocuments: '', identificationDocument: '' }
-  );
+  // Memoized empty application to avoid creating a new object/array every render
+  const emptyApplication = useMemo(() => ({
+    id: '',
+    passportPhoto: '',
+    academicDocuments: [] as string[],
+    identificationDocument: ''
+  }), []);
+
+  const appForDocs = shouldFetchDocuments ? stableApplication : emptyApplication;
+
+  const { documents, loading: documentsLoading, refetch } = useApplicationDocuments(appForDocs);
 
   // Document categories - matching our 3 document types
   const documentCategories: Array<{
@@ -73,7 +116,7 @@ export default function DocumentsPage() {
       console.log('📋 Applications fetched:', userApplications);
       setApplications(userApplications);
       
-      // Auto-select first application if none selected
+      // Auto-select first application only if none selected yet
       if (userApplications.length > 0 && !selectedApplication) {
         console.log('📋 Auto-selecting first application:', userApplications[0]);
         setSelectedApplication(userApplications[0]);
@@ -85,13 +128,29 @@ export default function DocumentsPage() {
     } finally {
       setIsLoading(false);
     }
-  }, [user?.email, selectedApplication]);
+  }, [user?.email]);
 
   // Fetch applications when component mounts
   useEffect(() => {
     console.log('📋 useEffect triggered for fetchApplications');
     fetchApplications();
   }, [fetchApplications]);
+
+  // Refresh selected application data after upload/removal
+  const refreshSelectedApplication = useCallback(async () => {
+    if (!selectedApplication?.id || !user?.email) return;
+    
+    try {
+      const userApplications = await studentApplicationService.getApplicationsByEmail(user.email);
+      const updated = userApplications.find(a => a.id === selectedApplication.id);
+      if (updated) {
+        setSelectedApplication(updated);
+      }
+      refetch();
+    } catch (error) {
+      console.error('Error refreshing selected application:', error);
+    }
+  }, [selectedApplication?.id, user?.email, refetch]);
 
   // Handle file selection and upload
   const handleFileUpload = async (documentType: 'passportPhoto' | 'academicDocuments' | 'identificationDocument') => {
@@ -111,29 +170,78 @@ export default function DocumentsPage() {
       if (!file) return;
 
       try {
-        const result = await uploadApplicationDocument(
+        // Use application service to upload and update Firestore (append for academic docs)
+        setManualUploading(true);
+        setManualUploadError(null);
+        const res = await studentApplicationService.uploadDocumentAndUpdateFirestore({
           file,
-          selectedApplication.id,
-          documentType,
-          user.email!
-        );
+          type: documentType,
+          applicationId: selectedApplication.id,
+          studentEmail: user.email!
+        });
 
-        if (result) {
-          // Update the selected application with the new document URL
-          setSelectedApplication(prev => prev ? {
-            ...prev,
-            [documentType]: result.downloadURL
-          } : null);
-          
-          // Refetch documents to get the latest URLs
-          refetch();
+        if (res?.success) {
+          // Update local selected application state
+          setSelectedApplication(prev => {
+            if (!prev) return prev;
+            if (documentType === 'academicDocuments') {
+              const prevDocs = Array.isArray(prev.academicDocuments) ? prev.academicDocuments : (prev.academicDocuments ? [prev.academicDocuments] : []);
+              return {
+                ...prev,
+                academicDocuments: [...prevDocs, res.downloadUrl]
+              } as Application;
+            }
+            return {
+              ...prev,
+              [documentType]: res.downloadUrl
+            } as Application;
+          });
+
+          // Refresh from backend for consistency
+          await refreshSelectedApplication();
+          showSuccess('Document Uploaded', documentType === 'academicDocuments' ? 'Your academic document was added successfully.' : 'Your document was uploaded successfully.', 4000);
+        } else {
+          setManualUploadError(res?.message || 'Upload failed');
+          showError('Upload Failed', res?.message || 'Please try again later.', 6000);
         }
       } catch (error) {
         console.error('Upload failed:', error);
+        setManualUploadError(error instanceof Error ? error.message : 'Upload failed');
+        showError('Upload Failed', error instanceof Error ? error.message : 'Unknown error', 6000);
+      } finally {
+        setManualUploading(false);
       }
     };
 
     input.click();
+  };
+
+  // Remove a specific academic document by URL
+  const handleRemoveAcademicDocument = async (docUrl: string) => {
+    if (!selectedApplication) return;
+    try {
+      setDeletingDocUrl(docUrl);
+      const res = await studentApplicationService.deleteAcademicDocument(selectedApplication.id, docUrl);
+      if (res.success) {
+        // Update local state
+        setSelectedApplication(prev => {
+          if (!prev) return prev;
+          const currentDocs = Array.isArray(prev.academicDocuments) ? prev.academicDocuments : (prev.academicDocuments ? [prev.academicDocuments] : []);
+          const filtered = currentDocs.filter(u => u !== docUrl);
+          return { ...prev, academicDocuments: filtered } as Application;
+        });
+        // Refresh documents and applications
+        await refreshSelectedApplication();
+        showSuccess('Document Removed', 'The academic document has been removed.', 4000);
+      } else {
+        showError('Remove Failed', res.message || 'Failed to remove document.', 6000);
+      }
+    } catch (err) {
+      const msg = err instanceof Error ? err.message : 'Unknown error removing document';
+      showError('Remove Failed', msg, 6000);
+    } finally {
+      setDeletingDocUrl(null);
+    }
   };
 
   // Show loading skeleton - but always show navigation
@@ -383,14 +491,18 @@ export default function DocumentsPage() {
           hasDocument: !!application.passportPhoto
         };
       case 'academicDocuments':
+        const academicDocs = Array.isArray(application.academicDocuments) 
+          ? application.academicDocuments 
+          : (application.academicDocuments ? [application.academicDocuments] : []);
         return {
           name: 'Academic Documents',
-          description: 'Upload transcripts, certificates, diplomas, or academic records from previous institutions.',
+          description: `Upload transcripts, certificates, diplomas, or academic records from previous institutions. You can upload up to 5 documents. Currently uploaded: ${academicDocs.length} document(s).`,
           fileTypes: 'PDF, DOC, DOCX, JPG, JPEG, PNG',
           maxSize: '10MB',
           isRequired: true,
-          uploadedUrl: documents?.academicDocumentsUrl,
-          hasDocument: !!application.academicDocuments
+          uploadedUrls: documents?.academicDocumentsUrls || [],
+          hasDocument: academicDocs.length > 0,
+          documentCount: academicDocs.length
         };
       case 'identificationDocument':
         return {
@@ -414,8 +526,137 @@ export default function DocumentsPage() {
     selectedApplication?.identificationDocument
   ].filter(Boolean).length;
 
+  // Determine missing required docs
+  const academicCount = Array.isArray(selectedApplication?.academicDocuments)
+    ? (selectedApplication?.academicDocuments?.length || 0)
+    : (selectedApplication?.academicDocuments ? 1 : 0);
+  const missingDocs: string[] = [];
+  if (!selectedApplication?.passportPhoto) missingDocs.push('Passport Photo');
+  if (academicCount === 0) missingDocs.push('Academic Documents');
+  if (!selectedApplication?.identificationDocument) missingDocs.push('Identification Document');
+
+  // Helpers to simplify JSX conditions in the action area
+  const isAcademicCategory = activeCategory === 'academicDocuments';
+  const hasMultiDocs = Boolean(
+    documentInfo?.hasDocument &&
+    Array.isArray((documentInfo as AcademicDocumentInfo)?.uploadedUrls) &&
+    (documentInfo as AcademicDocumentInfo)?.uploadedUrls?.length > 0
+  );
+  const hasSingleDoc = Boolean(documentInfo?.hasDocument && (documentInfo as SingleDocumentInfo)?.uploadedUrl);
+
+  const renderActionArea = () => {
+    if (isAcademicCategory) {
+      if (hasMultiDocs) {
+        return (
+          <div className="space-y-2 w-full">
+            <div className="text-sm text-slate-600 mb-2">
+              {(documentInfo as AcademicDocumentInfo).uploadedUrls.length} document(s) uploaded:
+            </div>
+            {(documentInfo as AcademicDocumentInfo).uploadedUrls.map((url: string, index: number) => (
+              <div key={index} className="flex items-center gap-2">
+                <a
+                  href={url}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="flex-1 flex items-center justify-center px-4 py-2 bg-slate-100 text-slate-800 rounded-lg hover:bg-slate-200 transition-colors text-sm font-medium min-h-[40px]"
+                >
+                  <i className="ri-eye-line mr-2"></i>
+                  View Document {index + 1}
+                </a>
+                <button
+                  onClick={() => handleRemoveAcademicDocument(url)}
+                  disabled={Boolean(deletingDocUrl) && deletingDocUrl === url}
+                  className={`px-3 py-2 text-sm rounded-lg border ${deletingDocUrl === url ? 'border-slate-300 text-slate-400 cursor-not-allowed' : 'border-red-200 text-red-700 hover:bg-red-50 hover:border-red-300'}`}
+                  title="Remove document"
+                >
+                  {deletingDocUrl === url ? (
+                    <span className="inline-flex items-center">
+                      <i className="ri-loader-4-line mr-1 animate-spin"></i>
+                      Removing
+                    </span>
+                  ) : (
+                    <span className="inline-flex items-center">
+                      <i className="ri-delete-bin-line mr-1"></i>
+                      Remove
+                    </span>
+                  )}
+                </button>
+              </div>
+            ))}
+            <button
+              onClick={() => handleFileUpload('academicDocuments')}
+              disabled={isUploading || (((documentInfo as AcademicDocumentInfo)?.documentCount || 0) >= 5)}
+              className="flex items-center justify-center px-4 py-3 bg-green-600 text-white rounded-lg hover:bg-green-700 transition-colors text-sm font-medium min-h-[44px] w-full disabled:opacity-50"
+            >
+              <i className="ri-upload-line mr-2"></i>
+              {isUploading
+                ? 'Uploading...'
+                : `Add More Documents (${Math.max(0, 5 - ((documentInfo as AcademicDocumentInfo)?.documentCount || 0))} remaining)`}
+            </button>
+          </div>
+        );
+      }
+      return (
+        <button
+          onClick={() => handleFileUpload('academicDocuments')}
+          disabled={isUploading}
+          className="flex items-center justify-center px-4 py-3 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors text-sm font-medium min-h-[44px] disabled:opacity-50 w-full"
+        >
+          <i className="ri-upload-line mr-2"></i>
+          {isUploading ? 'Uploading...' : 'Upload Academic Documents'}
+        </button>
+      );
+    }
+
+    if (hasSingleDoc) {
+      return (
+        <>
+          <a
+            href={(documentInfo as SingleDocumentInfo).uploadedUrl}
+            target="_blank"
+            rel="noopener noreferrer"
+            className="flex items-center justify-center px-4 py-3 bg-slate-100 text-slate-800 rounded-lg hover:bg-slate-200 transition-colors text-sm font-medium min-h-[44px]"
+          >
+            <i className="ri-eye-line mr-2"></i>
+            View Document
+          </a>
+          <button
+            onClick={() => handleFileUpload(activeCategory)}
+            disabled={isUploading}
+            className="flex items-center justify-center px-4 py-3 border border-red-800 text-red-800 hover:bg-red-800 hover:text-white rounded-lg transition-colors text-sm font-medium disabled:opacity-50 disabled:cursor-not-allowed min-h-[44px]"
+          >
+            <i className="ri-upload-line mr-2"></i>
+            Replace Document
+          </button>
+        </>
+      );
+    }
+
+    return (
+      <button
+        onClick={() => handleFileUpload(activeCategory)}
+        disabled={isUploading}
+        className="flex items-center justify-center px-4 py-3 bg-red-800 text-white rounded-lg hover:bg-red-900 transition-colors text-sm font-medium disabled:opacity-50 disabled:cursor-not-allowed min-h-[44px] w-full sm:w-auto"
+      >
+        {isUploading ? (
+          <>
+            <div className="animate-spin w-4 h-4 border-2 border-white border-t-transparent rounded-full mr-2"></div>
+            Uploading...
+          </>
+        ) : (
+          <>
+            <i className="ri-upload-line mr-2"></i>
+            Upload Document
+          </>
+        )}
+      </button>
+    );
+  };
+
   return (
     <div className="pb-20 md:pb-0">
+      {/* Toasts */}
+      <ToastContainer toasts={toasts} onClose={removeToast} />
       {/* Page Header */}
       <div className="mb-6">
         <h1 className="text-xl md:text-2xl font-bold text-slate-800">Application Documents</h1>
@@ -526,6 +767,24 @@ export default function DocumentsPage() {
               style={{ width: `${(uploadedCount / 3) * 100}%` }}
             ></div>
           </div>
+          {missingDocs.length > 0 ? (
+            <div className="mt-3 text-sm text-amber-800 bg-amber-50 border border-amber-200 rounded-lg p-3">
+              <div className="flex items-start gap-2">
+                <i className="ri-alert-line mt-0.5"></i>
+                <div>
+                  <span className="font-medium">Missing:</span>{' '}
+                  <span>{missingDocs.join(', ')}</span>
+                </div>
+              </div>
+            </div>
+          ) : (
+            <div className="mt-3 text-sm text-green-800 bg-green-50 border border-green-200 rounded-lg p-3">
+              <div className="flex items-start gap-2">
+                <i className="ri-check-line mt-0.5"></i>
+                <div>All required documents have been provided.</div>
+              </div>
+            </div>
+          )}
         </div>
       </div>
 
@@ -573,45 +832,7 @@ export default function DocumentsPage() {
                 </div>
                 
                 <div className="flex flex-col sm:flex-row gap-2">
-                  {documentInfo.hasDocument && documentInfo.uploadedUrl ? (
-                    <>
-                      <a 
-                        href={documentInfo.uploadedUrl}
-                        target="_blank"
-                        rel="noopener noreferrer"
-                        className="flex items-center justify-center px-4 py-3 bg-slate-100 text-slate-800 rounded-lg hover:bg-slate-200 transition-colors text-sm font-medium min-h-[44px]"
-                      >
-                        <i className="ri-eye-line mr-2"></i>
-                        View Document
-                      </a>
-                      <button 
-                        onClick={() => handleFileUpload(activeCategory)}
-                        disabled={uploading}
-                        className="flex items-center justify-center px-4 py-3 border border-red-800 text-red-800 hover:bg-red-800 hover:text-white rounded-lg transition-colors text-sm font-medium disabled:opacity-50 disabled:cursor-not-allowed min-h-[44px]"
-                      >
-                        <i className="ri-upload-line mr-2"></i>
-                        Replace Document
-                      </button>
-                    </>
-                  ) : (
-                    <button 
-                      onClick={() => handleFileUpload(activeCategory)}
-                      disabled={uploading}
-                      className="flex items-center justify-center px-4 py-3 bg-red-800 text-white rounded-lg hover:bg-red-900 transition-colors text-sm font-medium disabled:opacity-50 disabled:cursor-not-allowed min-h-[44px] w-full sm:w-auto"
-                    >
-                      {uploading ? (
-                        <>
-                          <div className="animate-spin w-4 h-4 border-2 border-white border-t-transparent rounded-full mr-2"></div>
-                          Uploading...
-                        </>
-                      ) : (
-                        <>
-                          <i className="ri-upload-line mr-2"></i>
-                          Upload Document
-                        </>
-                      )}
-                    </button>
-                  )}
+                  {renderActionArea()}
                 </div>
               </div>
               
@@ -636,7 +857,7 @@ export default function DocumentsPage() {
               </div>
 
               {/* Upload Progress */}
-              {uploading && progress && (
+              {isUploading && progress && (
                 <div className="bg-blue-50 rounded-lg p-3 mb-3">
                   <div className="flex items-center justify-between text-sm mb-2">
                     <span className="text-blue-800">Uploading...</span>
@@ -652,11 +873,11 @@ export default function DocumentsPage() {
               )}
 
               {/* Upload Error */}
-              {uploadError && (
+              {combinedUploadError && (
                 <div className="bg-red-50 rounded-lg p-3 mb-3">
                   <div className="flex items-center text-red-800">
                     <i className="ri-error-warning-line mr-2"></i>
-                    <span className="text-sm">{uploadError}</span>
+                    <span className="text-sm">{combinedUploadError}</span>
                   </div>
                 </div>
               )}
@@ -667,12 +888,12 @@ export default function DocumentsPage() {
                   <div className="animate-spin w-6 h-6 border-2 border-slate-300 border-t-red-600 rounded-full mx-auto mb-2"></div>
                   <p className="text-sm text-slate-600">Loading document...</p>
                 </div>
-              ) : documentInfo.uploadedUrl ? (
+              ) : (documentInfo.uploadedUrl || (isAcademicCategory && hasMultiDocs)) ? (
                 <div className="bg-slate-50 rounded-lg p-4">
                   <div className="flex items-center justify-between mb-3">
                     <span className="text-sm font-medium text-slate-800">Document Preview</span>
                     <a 
-                      href={documentInfo.uploadedUrl}
+                      href={documentInfo.uploadedUrl || (isAcademicCategory ? (documentInfo as AcademicDocumentInfo).uploadedUrls?.[0] : undefined)}
                       target="_blank"
                       rel="noopener noreferrer"
                       className="text-xs text-blue-600 hover:text-blue-800 flex items-center"
@@ -700,15 +921,31 @@ export default function DocumentsPage() {
                     /* Document icon for PDFs and other docs */
                     <div className="text-center py-8">
                       <i className="ri-file-text-line text-4xl text-slate-400 mb-2"></i>
-                      <p className="text-sm text-slate-600">Document uploaded successfully</p>
+                      <p className="text-sm text-slate-600">{isAcademicCategory ? 'At least one academic document is uploaded' : 'Document uploaded successfully'}</p>
                     </div>
                   )}
                 </div>
               ) : (
                 <div className="bg-yellow-50 rounded-lg p-3">
-                  <div className="flex items-center text-yellow-800">
-                    <i className="ri-alert-line mr-2"></i>
-                    <span className="text-sm">This document is required for your application.</span>
+                  <div className="flex items-start text-yellow-800">
+                    <i className="ri-alert-line mr-2 mt-0.5"></i>
+                    <div className="text-sm">
+                      {activeCategory === 'passportPhoto' && (
+                        <>
+                          <span className="font-medium">Passport Photo not uploaded.</span> Please provide a clear passport-style photograph.
+                        </>
+                      )}
+                      {activeCategory === 'academicDocuments' && (
+                        <>
+                          <span className="font-medium">No academic documents uploaded.</span> Please upload transcripts, certificates, or other academic records (up to 5 documents).
+                        </>
+                      )}
+                      {activeCategory === 'identificationDocument' && (
+                        <>
+                          <span className="font-medium">Identification document missing.</span> Please upload a passport or national ID.
+                        </>
+                      )}
+                    </div>
                   </div>
                 </div>
               )}

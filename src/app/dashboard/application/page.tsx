@@ -72,6 +72,7 @@ export default function ApplicationPage() {
   const [activeSection, setActiveSection] = useState('personal');
   const [isEditing, setIsEditing] = useState(true);
   const [isSubmitting, setIsSubmitting] = useState(false);
+  const [deletingDocUrl, setDeletingDocUrl] = useState<string | null>(null);
   
   // Payment state - TEMPORARILY DISABLED
   // const [paymentData, setPaymentData] = useState<{
@@ -93,10 +94,9 @@ export default function ApplicationPage() {
   const [files, setFiles] = useState<{
     passportPhoto?: File;
     academicDocuments: File[];
-    identificationDocuments: File[];
+    identificationDocument?: File; // Changed from array to single file
   }>({
     academicDocuments: [],
-    identificationDocuments: [],
   });
   
   // Country search state
@@ -672,8 +672,8 @@ export default function ApplicationPage() {
       if (Array.isArray(files.academicDocuments)) {
         files.academicDocuments.forEach(file => fileNames.push(file.name));
       }
-      if (Array.isArray(files.identificationDocuments)) {
-        files.identificationDocuments.forEach(file => fileNames.push(file.name));
+      if (files.identificationDocument) {
+        fileNames.push(files.identificationDocument.name);
       }
       
       // Start progress tracking
@@ -701,7 +701,7 @@ export default function ApplicationPage() {
       
       // Step 1: Compress files if they exist (OPTIMIZATION)
       let processedFiles = files;
-      if (files.passportPhoto || files.academicDocuments?.length || files.identificationDocuments?.length) {
+      if (files.passportPhoto || files.academicDocuments?.length || files.identificationDocument) {
         updateStage('compressing', 'Optimizing file sizes for faster upload...');
         
         try {
@@ -900,7 +900,7 @@ export default function ApplicationPage() {
       }
 
       // Upload new documents if they exist
-      if (files.passportPhoto || files.academicDocuments?.length || files.identificationDocuments?.length) {
+      if (files.passportPhoto || files.academicDocuments?.length || files.identificationDocument) {
         const uploads = [];
         
         // Add passport photo
@@ -915,18 +915,20 @@ export default function ApplicationPage() {
         
         // Add academic documents
         if (files.academicDocuments?.length) {
-          uploads.push({
-            file: files.academicDocuments[0], // Take first for now
-            type: 'academicDocuments' as const,
-            applicationId: submittedApplication.id,
-            studentEmail: applicationData.email,
+          files.academicDocuments.forEach(academicDoc => {
+            uploads.push({
+              file: academicDoc,
+              type: 'academicDocuments' as const,
+              applicationId: submittedApplication.id,
+              studentEmail: applicationData.email,
+            });
           });
         }
         
-        // Add identification documents
-        if (files.identificationDocuments?.length) {
+        // Add identification document
+        if (files.identificationDocument) {
           uploads.push({
-            file: files.identificationDocuments[0], // Take first for now
+            file: files.identificationDocument,
             type: 'identificationDocument' as const,
             applicationId: submittedApplication.id,
             studentEmail: applicationData.email,
@@ -1000,20 +1002,23 @@ export default function ApplicationPage() {
       
       // Add academic documents if exist
       if (files.academicDocuments && files.academicDocuments.length > 0) {
-        // For now, just upload the first document
-        uploads.push({
-          file: files.academicDocuments[0],
-          type: 'academicDocuments' as const,
-          applicationId: submittedApplication.id,
-          studentEmail: submittedApplication.email,
+        console.log(`📎 Adding ${files.academicDocuments.length} academic documents to upload queue...`);
+        // Upload all academic documents
+        files.academicDocuments.forEach((academicDoc, index) => {
+          console.log(`📎 Academic document ${index + 1}: ${academicDoc.name} (${academicDoc.size} bytes)`);
+          uploads.push({
+            file: academicDoc,
+            type: 'academicDocuments' as const,
+            applicationId: submittedApplication.id,
+            studentEmail: submittedApplication.email,
+          });
         });
       }
       
-      // Add identification documents if exist
-      if (files.identificationDocuments && files.identificationDocuments.length > 0) {
-        // For now, just upload the first document
+      // Add identification document if exists
+      if (files.identificationDocument) {
         uploads.push({
-          file: files.identificationDocuments[0],
+          file: files.identificationDocument,
           type: 'identificationDocument' as const,
           applicationId: submittedApplication.id,
           studentEmail: submittedApplication.email,
@@ -1040,7 +1045,7 @@ export default function ApplicationPage() {
       if (successfulUploads.length > 0) {
         showSuccess(
           'Documents Uploaded Successfully!',
-          `Successfully uploaded ${successfulUploads.length} document(s)! Previous documents were automatically replaced to save storage space.`,
+          `Successfully uploaded ${successfulUploads.length} document(s)! Academic documents are added to your collection, while ID and passport photos replace previous versions.`,
           7000
         );
         
@@ -1097,25 +1102,44 @@ export default function ApplicationPage() {
         setFiles(prev => ({ ...prev, passportPhoto: fileList[0] }));
       } else if (field === 'academicDocuments') {
         const newFiles = Array.from(fileList);
+        
+        // Check academic documents limit (5 max)
+        const currentLocalCount = files.academicDocuments.length;
+        const existingCount = submittedApplication && Array.isArray(submittedApplication.academicDocuments) 
+          ? submittedApplication.academicDocuments.length 
+          : 0;
+        const totalAfterUpload = currentLocalCount + existingCount + newFiles.length;
+        
+        if (totalAfterUpload > 5) {
+          const maxNewFiles = 5 - currentLocalCount - existingCount;
+          showError(
+            'Upload Limit Exceeded',
+            `Maximum 5 academic documents allowed. You can upload ${maxNewFiles} more document(s).`,
+            5000
+          );
+          return;
+        }
+        
         setFiles(prev => ({ ...prev, academicDocuments: [...prev.academicDocuments, ...newFiles] }));
-      } else if (field === 'identificationDocuments') {
-        const newFiles = Array.from(fileList);
-        setFiles(prev => ({ ...prev, identificationDocuments: [...prev.identificationDocuments, ...newFiles] }));
+      } else if (field === 'identificationDocument') {
+        // Single file for identification document
+        setFiles(prev => ({ ...prev, identificationDocument: fileList[0] }));
       }
     }
   };
 
   // Helper function to remove a file from a document array
-  const removeFile = (field: string, index: number) => {
+  const removeFile = (field: string, index?: number) => {
     if (field === 'academicDocuments') {
       setFiles(prev => ({
         ...prev,
         academicDocuments: prev.academicDocuments.filter((_, i) => i !== index)
       }));
-    } else if (field === 'identificationDocuments') {
+    } else if (field === 'identificationDocument') {
+      // Remove single identification document
       setFiles(prev => ({
         ...prev,
-        identificationDocuments: prev.identificationDocuments.filter((_, i) => i !== index)
+        identificationDocument: undefined
       }));
     }
   };
@@ -1863,9 +1887,13 @@ export default function ApplicationPage() {
                   <span className="text-slate-800">Academic Documents</span>
                 </div>
                 <span className={`px-2 py-1 rounded text-sm ${
-                  submittedApplication.academicDocuments ? 'bg-green-100 text-green-800' : 'bg-red-100 text-red-800'
+                  (Array.isArray(submittedApplication.academicDocuments) && submittedApplication.academicDocuments.length > 0) 
+                    ? 'bg-green-100 text-green-800' 
+                    : 'bg-red-100 text-red-800'
                 }`}>
-                  {submittedApplication.academicDocuments ? 'Uploaded' : 'Missing'}
+                  {(Array.isArray(submittedApplication.academicDocuments) && submittedApplication.academicDocuments.length > 0) 
+                    ? `Uploaded (${submittedApplication.academicDocuments.length} files)` 
+                    : 'Missing'}
                 </span>
               </div>
               
@@ -1882,16 +1910,45 @@ export default function ApplicationPage() {
               </div>
             </div>
 
-            {(!submittedApplication.passportPhoto || !submittedApplication.academicDocuments || !submittedApplication.identificationDocument) && (
+            {(!submittedApplication.passportPhoto || 
+              !(Array.isArray(submittedApplication.academicDocuments) ? submittedApplication.academicDocuments.length > 0 : submittedApplication.academicDocuments) || 
+              !submittedApplication.identificationDocument) && (
               <div className="mt-4 p-4 bg-amber-50 border border-amber-200 rounded-lg">
                 <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">
                   <div className="flex">
                     <i className="ri-alert-line text-amber-600 mt-0.5 mr-3"></i>
                     <div>
                       <h4 className="text-amber-800 font-medium">Missing Documents</h4>
-                      <p className="text-amber-700 text-sm mt-1">
-                        Some required documents are missing. You can upload them here or contact the admissions office.
-                      </p>
+                      {(() => {
+                        const missingDocs: string[] = [];
+                        if (!submittedApplication.passportPhoto) missingDocs.push('Passport Photo');
+                        const hasAcademicDocs = Array.isArray(submittedApplication.academicDocuments)
+                          ? submittedApplication.academicDocuments.length > 0
+                          : Boolean(submittedApplication.academicDocuments);
+                        if (!hasAcademicDocs) missingDocs.push('Academic Documents');
+                        if (!submittedApplication.identificationDocument) missingDocs.push('Identification Document');
+
+                        return (
+                          <div>
+                            <p className="text-amber-700 text-sm mt-1">
+                              The following required documents are missing:
+                              {' '}<span className="font-medium">{missingDocs.join(', ')}</span>.
+                              {' '}You can upload them here or contact the admissions office.
+                            </p>
+                            <div className="mt-2 flex flex-wrap gap-2">
+                              {missingDocs.map((doc) => (
+                                <span
+                                  key={doc}
+                                  className="inline-flex items-center px-2 py-0.5 rounded-full text-xs bg-amber-100 text-amber-800 border border-amber-200"
+                                >
+                                  <i className="ri-error-warning-line mr-1"></i>
+                                  {doc}
+                                </span>
+                              ))}
+                            </div>
+                          </div>
+                        );
+                      })()}
                     </div>
                   </div>
                   <button
@@ -1919,7 +1976,6 @@ export default function ApplicationPage() {
                       // Reset files and form for document upload mode
                       setFiles({
                         academicDocuments: [],
-                        identificationDocuments: [],
                       });
                     }}
                     className="bg-amber-600 text-white px-4 py-2 rounded-lg hover:bg-amber-700 transition-colors text-sm whitespace-nowrap"
@@ -2237,6 +2293,18 @@ export default function ApplicationPage() {
                   {isSectionCompleted('personal') ? 'Completed' : 'In Progress'}
                 </span>
               </div>
+
+              {/* Section Requirements Indicator */}
+              {!isSectionCompleted('personal') && (
+                <div className="mb-4 p-3 bg-blue-50 border border-blue-200 rounded-lg">
+                  <div className="flex items-center">
+                    <i className="ri-information-line text-blue-600 mr-2"></i>
+                    <p className="text-sm text-blue-800">
+                      Please fill in all required fields marked with <span className="text-red-600">*</span> to proceed to the next section.
+                    </p>
+                  </div>
+                </div>
+              )}
               
               {/* Information about pre-populated fields */}
               {userData && (
@@ -2292,7 +2360,7 @@ export default function ApplicationPage() {
                       value={applicationData.firstName}
                       onChange={(e) => handleInputChange('firstName', e.target.value)}
                       readOnly={!isEditing}
-                      className={`w-full px-4 py-3 rounded-lg border-2 border-slate-200 text-base ${
+                      className={`w-full px-4 py-3 rounded-lg border-2 border-slate-200 text-base focus:ring-2 focus:ring-red-800 focus:border-transparent ${
                         isEditing ? 'bg-white' : 'bg-[#f7f7f7]'
                       }`}
                       placeholder="Enter your first name"
@@ -2311,7 +2379,7 @@ export default function ApplicationPage() {
                       value={applicationData.lastName}
                       onChange={(e) => handleInputChange('lastName', e.target.value)}
                       readOnly={!isEditing}
-                      className={`w-full px-4 py-3 rounded-lg border-2 border-slate-200 text-base ${
+                      className={`w-full px-4 py-3 rounded-lg border-2 border-slate-200 text-base focus:ring-2 focus:ring-red-800 focus:border-transparent ${
                         isEditing ? 'bg-white' : 'bg-[#f7f7f7]'
                       }`}
                       placeholder="Enter your last name"
@@ -2334,7 +2402,7 @@ export default function ApplicationPage() {
                     value={applicationData.email || user?.email || ''}
                     onChange={(e) => handleInputChange('email', e.target.value)}
                     readOnly={!submittedApplication}
-                    className={`w-full px-4 py-3 rounded-lg border-2 text-base ${
+                    className={`w-full px-4 py-3 rounded-lg border-2 text-base focus:ring-2 focus:ring-red-800 focus:border-transparent ${
                       submittedApplication 
                         ? 'border-slate-200 bg-white' 
                         : 'border-green-200 bg-green-50 cursor-not-allowed'
@@ -2363,7 +2431,7 @@ export default function ApplicationPage() {
                     value={applicationData.phone || userData?.whatsappNumber || (userData as UserDataWithOptionalPhone)?.phoneNumber || (userData as UserDataWithOptionalPhone)?.phone || ''}
                     onChange={(e) => handleInputChange('phone', e.target.value)}
                     readOnly={!submittedApplication}
-                    className={`w-full px-4 py-3 rounded-lg border-2 text-base ${
+                    className={`w-full px-4 py-3 rounded-lg border-2 text-base focus:ring-2 focus:ring-red-800 focus:border-transparent ${
                       submittedApplication 
                         ? 'border-slate-200 bg-white' 
                         : 'border-green-200 bg-green-50 cursor-not-allowed'
@@ -2386,7 +2454,7 @@ export default function ApplicationPage() {
                       <div className="relative country-dropdown-container">
                         <div
                           onClick={toggleCountryDropdown}
-                          className="w-full px-4 py-3 rounded-lg border-2 border-slate-200 text-base bg-white cursor-pointer flex justify-between items-center"
+                          className="w-full px-4 py-3 rounded-lg border-2 border-slate-200 text-base bg-white cursor-pointer flex justify-between items-center focus:ring-2 focus:ring-red-800 focus:border-transparent"
                         >
                           <span className={applicationData.countryOfBirth ? 'text-black' : 'text-gray-500'}>
                             {applicationData.countryOfBirth || 'Select Country'}
@@ -2405,7 +2473,7 @@ export default function ApplicationPage() {
                                   placeholder="Search countries..."
                                   value={countrySearchQuery}
                                   onChange={handleCountrySearchChange}
-                                  className="w-full pl-10 pr-4 py-2 border border-slate-200 rounded-lg text-sm focus:outline-none focus:border-slate-400"
+                                  className="w-full pl-10 pr-4 py-2 border border-slate-200 rounded-lg text-base focus:outline-none focus:border-slate-400"
                                   autoFocus
                                 />
                               </div>
@@ -2508,22 +2576,66 @@ export default function ApplicationPage() {
                   <label className="block text-sm font-medium text-slate-800 mb-2">
                     Passport Photo <span className="text-red-600">*</span>
                   </label>
-                  <div className={`border-2 border-dashed border-slate-200 rounded-lg p-4 text-center ${
-                    isEditing ? 'bg-white' : 'bg-[#f7f7f7]'
-                  }`}>
+
+                  <div className="border-2 border-dashed rounded-lg p-4 text-center border-slate-200">
                     <div className="flex flex-col items-center">
                       <i className="ri-image-line text-2xl text-slate-400 mb-2"></i>
                       {files.passportPhoto ? (
-                        <p className="text-sm text-slate-600">{files.passportPhoto.name}</p>
+                        <div className="space-y-2">
+                          <div className="flex items-center justify-center text-green-700">
+                            <i className="ri-check-circle-fill mr-2"></i>
+                            <p className="text-sm font-medium">{files.passportPhoto.name}</p>
+                          </div>
+                          <p className="text-xs text-slate-600">
+                            {(files.passportPhoto.size / 1024 / 1024).toFixed(2)} MB
+                          </p>
+                          {isEditing && (
+                            <button
+                              onClick={() => setFiles(prev => ({ ...prev, passportPhoto: undefined }))}
+                              className="text-xs text-red-600 hover:text-red-800 hover:bg-red-50 px-2 py-1 rounded transition-colors"
+                            >
+                              <i className="ri-delete-bin-line mr-1"></i>
+                              Remove Photo
+                            </button>
+                          )}
+                        </div>
                       ) : submittedApplication ? (
-                        <p className="text-sm text-slate-600">
-                          {submittedApplication.passportPhoto ? 'Current photo on file - Upload new to replace' : 'No photo on file - Upload required'}
-                        </p>
+                        <div className="space-y-2">
+                          <div className={`flex items-center justify-center ${
+                            submittedApplication.passportPhoto ? 'text-blue-700' : 'text-red-700'
+                          }`}>
+                            <i className={`${
+                              submittedApplication.passportPhoto ? 'ri-image-fill' : 'ri-image-add-line'
+                            } mr-2`}></i>
+                            <p className="text-sm">
+                              {submittedApplication.passportPhoto 
+                                ? 'Photo on file - Upload new to replace' 
+                                : 'No photo on file - Upload required'
+                              }
+                            </p>
+                          </div>
+                          {submittedApplication.passportPhoto && (
+                            <a
+                              href={submittedApplication.passportPhoto}
+                              target="_blank"
+                              rel="noopener noreferrer"
+                              className="text-xs text-blue-600 hover:text-blue-800 hover:bg-blue-50 px-2 py-1 rounded transition-colors inline-flex items-center"
+                            >
+                              <i className="ri-eye-line mr-1"></i>
+                              View Current Photo
+                            </a>
+                          )}
+                        </div>
                       ) : (
-                        <p className="text-sm text-slate-600">No photo uploaded</p>
+                        <div className="space-y-2">
+                          <div className="flex items-center justify-center text-slate-700">
+                            <i className="ri-image-add-line mr-2"></i>
+                            <p className="text-sm">No photo uploaded</p>
+                          </div>
+                        </div>
                       )}
                       {isEditing && (
-                        <div className="mt-2">
+                        <div className="mt-3">
                           <input
                             type="file"
                             accept="image/jpeg,image/jpg,image/png"
@@ -2533,17 +2645,21 @@ export default function ApplicationPage() {
                           />
                           <label
                             htmlFor="passport-photo"
-                            className="cursor-pointer bg-red-800 text-white px-4 py-2 rounded-lg hover:bg-red-700 transition-colors text-sm"
+                            className="cursor-pointer bg-red-800 text-white px-4 py-2 rounded-lg hover:bg-red-700 transition-colors text-sm inline-flex items-center"
                           >
-                            {submittedApplication ? 'Update Photo' : 'Choose File'}
+                            <i className="ri-upload-line mr-2"></i>
+                            {files.passportPhoto 
+                              ? 'Replace Photo' 
+                              : submittedApplication 
+                              ? 'Update Photo' 
+                              : 'Choose Photo'
+                            }
                           </label>
                         </div>
                       )}
-                      <p className="text-xs text-slate-500 mt-1">
-                        Upload a recent passport-style photograph. JPG, JPEG, PNG accepted. Previous photos will be automatically replaced.
-                      </p>
                     </div>
                   </div>
+                  <p className="text-xs text-slate-500 mt-1">Upload a clear passport-style photo (JPG, PNG, max 5MB)</p>
                 </div>
               </div>
               
@@ -2556,7 +2672,7 @@ export default function ApplicationPage() {
                       ? 'bg-red-800 text-white hover:bg-[#600000]'
                       : 'bg-gray-300 text-gray-500 cursor-not-allowed'
                   }`}
-                  title={!isSectionCompleted('personal') ? 'Please complete all required fields in the Personal Details section first' : ''}
+                  title={!isSectionCompleted('personal') ? 'Please complete all required fields first' : ''}
                 >
                   Next: Program Selection
                   <i className="ri-arrow-right-line ml-1"></i>
@@ -2625,6 +2741,18 @@ export default function ApplicationPage() {
                   {isSectionCompleted('program') ? 'Completed' : 'In Progress'}
                 </span>
               </div>
+
+              {/* Section Requirements Indicator */}
+              {!isSectionCompleted('program') && (
+                <div className="mb-4 p-3 bg-blue-50 border border-blue-200 rounded-lg">
+                  <div className="flex items-center">
+                    <i className="ri-information-line text-blue-600 mr-2"></i>
+                    <p className="text-sm text-blue-800">
+                      Please select your mode of study, intake, and program to proceed.
+                    </p>
+                  </div>
+                </div>
+              )}
               
               {/* Program Selection Form */}
               <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
@@ -2750,63 +2878,183 @@ export default function ApplicationPage() {
                 <div className="sm:col-span-2">
                   <label className="block text-sm font-medium text-slate-800 mb-2">
                     Academic Documents <span className="text-red-600">*</span>
+                    <span className="text-xs text-slate-500 ml-2">(Max 5 documents allowed)</span>
                   </label>
-                  <div className={`border-2 border-slate-200 rounded-lg p-4 ${isEditing ? 'bg-white' : 'bg-[#f7f7f7]'}`}>
-                    <div className="flex items-center mb-2">
-                      <i className="ri-file-text-line text-lg text-slate-600 mr-2"></i>
-                      <span className="text-sm font-medium text-slate-700">
-                        {submittedApplication ? 'New Documents to Upload:' : 'Uploaded Documents:'}
-                      </span>
+
+                  <div className="border-2 rounded-lg p-4 border-slate-200 bg-white">
+                    <div className="flex items-center justify-between mb-3">
+                      <div className="flex items-center">
+                        <i className="ri-file-text-line text-lg text-slate-600 mr-2"></i>
+                        <span className="text-sm font-medium text-slate-700">
+                          {submittedApplication ? 'New Documents to Upload:' : 'Uploaded Documents:'}
+                        </span>
+                      </div>
                       {submittedApplication && (
-                        <span className="ml-2 px-2 py-1 bg-blue-100 text-blue-700 text-xs rounded">
-                          {submittedApplication.academicDocuments ? 'Has documents on file' : 'No documents on file'}
+                        <span className="px-2 py-1 bg-blue-100 text-blue-700 text-xs rounded">
+                          {(Array.isArray(submittedApplication.academicDocuments) && submittedApplication.academicDocuments.length > 0) 
+                            ? `Has ${submittedApplication.academicDocuments.length} document(s) on file` 
+                            : 'No documents on file'}
                         </span>
                       )}
                     </div>
+                    
+                    {/* Existing uploaded documents */}
+                    {submittedApplication && Array.isArray(submittedApplication.academicDocuments) && submittedApplication.academicDocuments.length > 0 && (
+                      <div className="mb-4 p-3 bg-blue-50 border border-blue-200 rounded-lg">
+                        <div className="flex items-center justify-between mb-3">
+                          <div className="text-sm font-medium text-blue-800">
+                            <i className="ri-folder-line mr-2"></i>
+                            Existing Documents on File ({submittedApplication.academicDocuments.length})
+                          </div>
+                        </div>
+                        <div className="space-y-2">
+                          {submittedApplication.academicDocuments.map((docUrl, index) => (
+                            <div key={index} className="flex items-center justify-between p-2 bg-white border border-blue-200 rounded">
+                              <div className="flex items-center">
+                                <i className="ri-file-text-line text-blue-600 mr-2"></i>
+                                <span className="text-sm text-slate-700">Academic Document {index + 1}</span>
+                              </div>
+                              <div className="flex items-center gap-2">
+                                <a
+                                  href={docUrl}
+                                  target="_blank"
+                                  rel="noopener noreferrer"
+                                  className="text-blue-600 hover:text-blue-800 text-xs px-2 py-1 hover:bg-blue-50 rounded transition-colors"
+                                  title="View document"
+                                >
+                                  <i className="ri-eye-line mr-1"></i>
+                                  View
+                                </a>
+                                {isEditing && (
+                                  <button
+                                    onClick={async () => {
+                                      if (!submittedApplication) return;
+                                      setDeletingDocUrl(docUrl);
+                                      try {
+                                        const res = await studentApplicationService.deleteAcademicDocument(submittedApplication.id, docUrl);
+                                        if (res.success) {
+                                          showSuccess('Document Removed', 'Academic document has been removed successfully.', 4000);
+                                          await checkForSubmittedApplication();
+                                        } else {
+                                          showError('Remove Failed', res.message || 'Failed to remove document.', 6000);
+                                        }
+                                      } catch (err) {
+                                        const msg = err instanceof Error ? err.message : 'Unknown error';
+                                        showError('Remove Failed', msg, 6000);
+                                      } finally {
+                                        setDeletingDocUrl(null);
+                                      }
+                                    }}
+                                    disabled={deletingDocUrl === docUrl || isSubmitting}
+                                    className={`text-red-600 text-xs px-2 py-1 rounded transition-colors ${deletingDocUrl === docUrl ? 'opacity-60 cursor-not-allowed' : 'hover:text-red-800 hover:bg-red-50'}`}
+                                    title="Remove document"
+                                  >
+                                    {deletingDocUrl === docUrl ? (
+                                      <span className="inline-flex items-center">
+                                        <i className="ri-loader-4-line mr-1 animate-spin"></i>
+                                        Removing...
+                                      </span>
+                                    ) : (
+                                      <span className="inline-flex items-center">
+                                        <i className="ri-delete-bin-line mr-1"></i>
+                                        Remove
+                                      </span>
+                                    )}
+                                  </button>
+                                )}
+                              </div>
+                            </div>
+                          ))}
+                        </div>
+                      </div>
+                    )}
+                    
+                    {/* Current selected files */}
                     {files.academicDocuments && files.academicDocuments.length > 0 ? (
-                      <ul className="space-y-1">
+                      <div className="space-y-2 mb-3">
+                        <div className="text-sm text-slate-600 font-medium mb-2">
+                          Selected files ({files.academicDocuments.length}):
+                        </div>
                         {files.academicDocuments.map((doc, index) => (
-                          <li key={index} className="flex items-center justify-between p-2 bg-slate-50 rounded">
+                          <div key={index} className="flex items-center justify-between p-3 bg-slate-50 rounded-lg border">
                             <div className="flex items-center">
-                              <i className="ri-file-line text-slate-600 mr-2"></i>
-                              <span className="text-sm text-slate-700">{doc.name}</span>
+                              <i className="ri-file-line text-green-600 mr-2"></i>
+                              <div>
+                                <span className="text-sm text-slate-700 font-medium">{doc.name}</span>
+                                <div className="text-xs text-slate-500">
+                                  {(doc.size / 1024 / 1024).toFixed(2)} MB
+                                </div>
+                              </div>
                             </div>
                             {isEditing && (
                               <button
                                 onClick={() => removeFile('academicDocuments', index)}
-                                className="text-red-600 hover:text-red-800"
+                                className="text-red-600 hover:text-red-800 hover:bg-red-50 p-1 rounded transition-colors"
                                 title="Remove file"
                               >
                                 <i className="ri-delete-bin-line"></i>
                               </button>
                             )}
-                          </li>
+                          </div>
                         ))}
-                      </ul>
+                      </div>
                     ) : (
-                      <p className="text-sm text-slate-500">No documents uploaded</p>
+                      <div className="text-sm text-slate-500 mb-3 p-3 bg-slate-50 rounded-lg text-center">
+                        <i className="ri-upload-cloud-line text-2xl text-slate-400 mb-2 block"></i>
+                        No academic documents selected yet
+                      </div>
                     )}
+                    
+                    {/* Upload buttons */}
                     {isEditing && (
-                      <div className="mt-3">
-                        <input
-                          type="file"
-                          multiple
-                          accept=".pdf,.doc,.docx,image/jpeg,image/jpg,image/png"
-                          onChange={(e) => handleFileUpload('academicDocuments', e.target.files)}
-                          className="hidden"
-                          id="academic-docs"
-                        />
-                        <label
-                          htmlFor="academic-docs"
-                          className="cursor-pointer bg-red-800 text-white px-4 py-2 rounded-lg hover:bg-red-700 transition-colors text-sm inline-block"
-                        >
-                          <i className="ri-upload-line mr-2"></i>
-                          Upload Documents
-                        </label>
+                      <div className="flex flex-wrap gap-2">
+                        <div className="relative">
+                          <input
+                            type="file"
+                            multiple
+                            accept=".pdf,.doc,.docx,image/jpeg,image/jpg,image/png"
+                            onChange={(e) => handleFileUpload('academicDocuments', e.target.files)}
+                            className="hidden"
+                            id="academic-docs"
+                          />
+                          <label
+                            htmlFor="academic-docs"
+                            className="cursor-pointer bg-red-800 text-white px-4 py-2 rounded-lg hover:bg-red-700 transition-colors text-sm inline-flex items-center"
+                          >
+                            <i className="ri-upload-line mr-2"></i>
+                            {(() => {
+                              const existingCount = submittedApplication && Array.isArray(submittedApplication.academicDocuments) 
+                                ? submittedApplication.academicDocuments.length 
+                                : 0;
+                              const currentCount = files.academicDocuments.length;
+                              const totalCount = existingCount + currentCount;
+                              const remaining = Math.max(0, 5 - totalCount);
+                              
+                              if (totalCount >= 5) {
+                                return 'Maximum Documents Reached';
+                              } else if (files.academicDocuments.length > 0) {
+                                return `Add More (${remaining} remaining)`;
+                              } else {
+                                return `Upload Documents (${remaining} slots available)`;
+                              }
+                            })()}
+                          </label>
+                        </div>
+                        {files.academicDocuments && files.academicDocuments.length > 0 && (
+                          <button
+                            onClick={() => setFiles(prev => ({ ...prev, academicDocuments: [] }))}
+                            className="bg-slate-500 text-white px-4 py-2 rounded-lg hover:bg-slate-600 transition-colors text-sm inline-flex items-center"
+                          >
+                            <i className="ri-delete-bin-line mr-2"></i>
+                            Clear All
+                          </button>
+                        )}
                       </div>
                     )}
                     <p className="text-xs text-slate-500 mt-2">
-                      Upload transcripts, certificates, diplomas, or academic records from previous institutions. Previous uploads will be replaced automatically.
+                      <strong>Upload multiple files:</strong> transcripts, certificates, diplomas, or academic records from previous institutions. 
+                      Accepted formats: PDF, DOC, DOCX, JPG, PNG. 
+                      <span className="text-amber-600 font-medium">Note: All files will be uploaded, but only the most recent submission will be kept on file.</span>
                     </p>
                   </div>
                 </div>
@@ -2814,64 +3062,91 @@ export default function ApplicationPage() {
                 {/* Identification Documents Section */}
                 <div className="sm:col-span-2">
                   <label className="block text-sm font-medium text-slate-800 mb-2">
-                    Identification Documents <span className="text-red-600">*</span>
+                    Identification Document <span className="text-red-600">*</span>
+                    <span className="text-xs text-slate-500 ml-2">(Single document only)</span>
                   </label>
                   <div className={`border-2 border-slate-200 rounded-lg p-4 ${isEditing ? 'bg-white' : 'bg-[#f7f7f7]'}`}>
-                    <div className="flex items-center mb-2">
-                      <i className="ri-id-card-line text-lg text-slate-600 mr-2"></i>
-                      <span className="text-sm font-medium text-slate-700">
-                        {submittedApplication ? 'New Documents to Upload:' : 'Uploaded Documents:'}
-                      </span>
+                    <div className="flex items-center justify-between mb-3">
+                      <div className="flex items-center">
+                        <i className="ri-id-card-line text-lg text-slate-600 mr-2"></i>
+                        <span className="text-sm font-medium text-slate-700">
+                          {submittedApplication ? 'New Document to Upload:' : 'Uploaded Document:'}
+                        </span>
+                      </div>
                       {submittedApplication && (
-                        <span className="ml-2 px-2 py-1 bg-blue-100 text-blue-700 text-xs rounded">
-                          {submittedApplication.identificationDocument ? 'Has documents on file' : 'No documents on file'}
+                        <span className="px-2 py-1 bg-blue-100 text-blue-700 text-xs rounded">
+                          {submittedApplication.identificationDocument ? 'Has document on file' : 'No document on file'}
                         </span>
                       )}
                     </div>
-                    {files.identificationDocuments && files.identificationDocuments.length > 0 ? (
-                      <ul className="space-y-1">
-                        {files.identificationDocuments.map((doc, index) => (
-                          <li key={index} className="flex items-center justify-between p-2 bg-slate-50 rounded">
-                            <div className="flex items-center">
-                              <i className="ri-file-line text-slate-600 mr-2"></i>
-                              <span className="text-sm text-slate-700">{doc.name}</span>
+                    
+                    {/* Current selected file */}
+                    {files.identificationDocument ? (
+                      <div className="space-y-2 mb-3">
+                        <div className="text-sm text-slate-600 font-medium mb-2">
+                          Selected document:
+                        </div>
+                        <div className="flex items-center justify-between p-3 bg-slate-50 rounded-lg border">
+                          <div className="flex items-center">
+                            <i className="ri-file-line text-green-600 mr-2"></i>
+                            <div>
+                              <span className="text-sm text-slate-700 font-medium">{files.identificationDocument.name}</span>
+                              <div className="text-xs text-slate-500">
+                                {(files.identificationDocument.size / 1024 / 1024).toFixed(2)} MB
+                              </div>
                             </div>
-                            {isEditing && (
-                              <button
-                                onClick={() => removeFile('identificationDocuments', index)}
-                                className="text-red-600 hover:text-red-800"
-                                title="Remove file"
-                              >
-                                <i className="ri-delete-bin-line"></i>
-                              </button>
-                            )}
-                          </li>
-                        ))}
-                      </ul>
+                          </div>
+                          {isEditing && (
+                            <button
+                              onClick={() => removeFile('identificationDocument')}
+                              className="text-red-600 hover:text-red-800 hover:bg-red-50 p-1 rounded transition-colors"
+                              title="Remove file"
+                            >
+                              <i className="ri-delete-bin-line"></i>
+                            </button>
+                          )}
+                        </div>
+                      </div>
                     ) : (
-                      <p className="text-sm text-slate-500">No documents uploaded</p>
+                      <div className="text-sm text-slate-500 mb-3 p-3 bg-slate-50 rounded-lg text-center">
+                        <i className="ri-upload-cloud-line text-2xl text-slate-400 mb-2 block"></i>
+                        No identification document selected yet
+                      </div>
                     )}
+                    
+                    {/* Upload button */}
                     {isEditing && (
-                      <div className="mt-3">
-                        <input
-                          type="file"
-                          multiple
-                          accept=".pdf,.doc,.docx,image/jpeg,image/jpg,image/png"
-                          onChange={(e) => handleFileUpload('identificationDocuments', e.target.files)}
-                          className="hidden"
-                          id="id-docs"
-                        />
-                        <label
-                          htmlFor="id-docs"
-                          className="cursor-pointer bg-red-800 text-white px-4 py-2 rounded-lg hover:bg-red-700 transition-colors text-sm inline-block"
-                        >
-                          <i className="ri-upload-line mr-2"></i>
-                          Upload Documents
-                        </label>
+                      <div className="flex flex-wrap gap-2">
+                        <div className="relative">
+                          <input
+                            type="file"
+                            accept=".pdf,.doc,.docx,image/jpeg,image/jpg,image/png"
+                            onChange={(e) => handleFileUpload('identificationDocument', e.target.files)}
+                            className="hidden"
+                            id="id-docs"
+                          />
+                          <label
+                            htmlFor="id-docs"
+                            className="cursor-pointer bg-red-800 text-white px-4 py-2 rounded-lg hover:bg-red-700 transition-colors text-sm inline-flex items-center"
+                          >
+                            <i className="ri-upload-line mr-2"></i>
+                            {files.identificationDocument ? 'Replace Document' : 'Upload Document'}
+                          </label>
+                        </div>
+                        {files.identificationDocument && (
+                          <button
+                            onClick={() => setFiles(prev => ({ ...prev, identificationDocument: undefined }))}
+                            className="bg-slate-500 text-white px-4 py-2 rounded-lg hover:bg-slate-600 transition-colors text-sm inline-flex items-center"
+                          >
+                            <i className="ri-delete-bin-line mr-2"></i>
+                            Remove Document
+                          </button>
+                        )}
                       </div>
                     )}
                     <p className="text-xs text-slate-500 mt-2">
-                      Upload passport, national ID, birth certificate, or other government-issued identification. Previous uploads will be replaced automatically.
+                      <strong>Upload one document:</strong> passport, national ID, birth certificate, or other government-issued identification. 
+                      Accepted formats: PDF, DOC, DOCX, JPG, PNG.
                     </p>
                   </div>
                 </div>
@@ -2880,13 +3155,13 @@ export default function ApplicationPage() {
               {/* File Size Preview */}
               {(files.passportPhoto || 
                 (Array.isArray(files.academicDocuments) && files.academicDocuments.length > 0) || 
-                (Array.isArray(files.identificationDocuments) && files.identificationDocuments.length > 0)) && (
+                files.identificationDocument) && (
                 <div className="mt-6">
                   <FileSizePreview
                     files={{
                       passportPhoto: files.passportPhoto,
                       academicDocuments: files.academicDocuments,
-                      identificationDocuments: files.identificationDocuments
+                      identificationDocument: files.identificationDocument
                     }}
                   />
                 </div>
@@ -2904,7 +3179,13 @@ export default function ApplicationPage() {
                 <div className="flex flex-col sm:flex-row gap-3">
                   <button
                     onClick={() => handleSectionClick('additional')}
-                    className="px-4 py-2 text-sm bg-red-800 text-white rounded-lg hover:bg-[#600000] transition-colors"
+                    disabled={!isSectionCompleted('program')}
+                    className={`px-4 py-2 text-sm rounded-lg transition-colors ${
+                      isSectionCompleted('program')
+                        ? 'bg-red-800 text-white hover:bg-[#600000]'
+                        : 'bg-gray-300 text-gray-500 cursor-not-allowed'
+                    }`}
+                    title={!isSectionCompleted('program') ? 'Please complete all required fields first' : ''}
                   >
                     Next: Additional Information
                     <i className="ri-arrow-right-line ml-1"></i>
@@ -2960,16 +3241,13 @@ export default function ApplicationPage() {
           {/* Additional Information Section - Matching frontend AdditionalDataStep */}
           {activeSection === 'additional' && (
             <div className="bg-white rounded-lg p-4 md:p-6 border border-slate-200">
-              <div className="flex flex-col sm:flex-row sm:justify-between sm:items-center mb-4 gap-2">
-                <h2 className="text-base md:text-lg font-semibold text-slate-800">Additional Information</h2>
-                <span className={`text-xs px-2 py-1 rounded-full w-fit ${
-                  isSectionCompleted('additional') 
-                    ? 'bg-green-100 text-green-700' 
-                    : 'bg-yellow-100 text-yellow-700'
-                }`}>
-                  {isSectionCompleted('additional') ? 'Completed' : 'In Progress'}
-                </span>
+              <div className="flex items-center mb-6">
+                <div className="w-8 h-8 bg-red-800 text-white rounded-full flex items-center justify-center mr-3">
+                  3
+                </div>
+                <h2 className="text-xl font-bold text-gray-800">Additional Information</h2>
               </div>
+
               
               {/* Sponsorship Information */}
               <div className="mb-6">
@@ -2980,7 +3258,7 @@ export default function ApplicationPage() {
                       Sponsor Telephone <span className="text-slate-500">(Optional)</span>
                     </label>
                     {isEditing ? (
-                      <div className="w-full px-3 py-2 rounded-lg border-2 border-slate-200 text-sm bg-white focus-within:border-red-800 hover:border-red-800/50 transition-colors">
+                      <div className="w-full px-3 py-2 rounded-lg border-2 border-slate-200 text-base bg-white focus-within:border-red-800 hover:border-red-800/50 transition-colors">
                         <PhoneInput
                           international
                           countryCallingCodeEditable={false}
@@ -2994,6 +3272,13 @@ export default function ApplicationPage() {
                             '--PhoneInputCountrySelectArrow-color': '#666666',
                             '--PhoneInputCountrySelectArrow-opacity': '0.8',
                           }}
+                          inputStyle={{
+                            fontSize: '16px',
+                            border: 'none',
+                            outline: 'none',
+                            background: 'transparent',
+                            width: '100%'
+                          }}
                         />
                       </div>
                     ) : (
@@ -3001,7 +3286,7 @@ export default function ApplicationPage() {
                         type="text"
                         value={applicationData.sponsorTelephone}
                         readOnly
-                        className="w-full px-3 py-2 rounded-lg border-2 border-slate-200 text-sm bg-[#f7f7f7]"
+                        className="w-full px-3 py-2 rounded-lg border-2 border-slate-200 text-base bg-[#f7f7f7]"
                       />
                     )}
                     <p className="text-xs text-slate-500 mt-1">Phone number of sponsor or parent/guardian with country code</p>
@@ -3015,7 +3300,7 @@ export default function ApplicationPage() {
                       value={applicationData.sponsorEmail}
                       onChange={(e) => handleInputChange('sponsorEmail', e.target.value)}
                       readOnly={!isEditing}
-                      className={`w-full px-3 py-2 rounded-lg border-2 border-slate-200 text-sm ${
+                      className={`w-full px-3 py-2 rounded-lg border-2 border-slate-200 text-base ${
                         isEditing ? 'bg-white' : 'bg-[#f7f7f7]'
                       }`}
                       placeholder="sponsor@example.com"
@@ -3097,8 +3382,6 @@ export default function ApplicationPage() {
                   <i className="ri-arrow-left-line mr-1"></i>
                   Previous: Program Selection
                 </button>
-
-                {/* PAYMENT SECTION TEMPORARILY REMOVED */}
 
                 <button
                   onClick={

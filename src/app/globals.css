@@ -2,6 +2,34 @@
 @import "remixicon/fonts/remixicon.css";
 @import 'react-phone-number-input/style.css';
 
+/* Prevent mobile zoom on input focus by ensuring font-size is at least 16px */
+input[type="text"],
+input[type="email"],
+input[type="password"],
+input[type="tel"],
+input[type="url"],
+input[type="search"],
+input[type="number"],
+input[type="date"],
+input[type="datetime-local"],
+input[type="month"],
+input[type="time"],
+input[type="week"],
+select,
+textarea {
+  font-size: 16px !important;
+}
+
+/* Ensure PhoneInput component also uses proper font size */
+.PhoneInputInput {
+  font-size: 16px !important;
+}
+
+/* Fix any other input-like elements */
+.PhoneInputCountrySelect {
+  font-size: 16px !important;
+}
+
 /* Custom Animations for Welcome Page */
 @keyframes gradient-x {
   0%, 100% {
@@ -101,6 +129,41 @@
   background: rgba(255, 255, 255, 0.1);
   backdrop-filter: blur(10px);
   border: 1px solid rgba(255, 255, 255, 0.2);
+}
+
+/* Smooth Transitions */
+.transition-all-smooth {
+  transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+}
+
+/* Enhanced shadows */
+.shadow-smooth {
+  box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.05), 0 2px 4px -1px rgba(0, 0, 0, 0.03);
+}
+
+.shadow-hover {
+  box-shadow: 0 10px 15px -3px rgba(0, 0, 0, 0.08), 0 4px 6px -2px rgba(0, 0, 0, 0.04);
+}
+
+/* Progress Bar Animation */
+@keyframes progress-shine {
+  0% {
+    background-position: -200% center;
+  }
+  100% {
+    background-position: 200% center;
+  }
+}
+
+.progress-animated {
+  background: linear-gradient(
+    90deg,
+    #dc2626,
+    #ef4444,
+    #dc2626
+  );
+  background-size: 200% 100%;
+  animation: progress-shine 2s ease-in-out infinite;
 }
 
 /* Gradient Background */

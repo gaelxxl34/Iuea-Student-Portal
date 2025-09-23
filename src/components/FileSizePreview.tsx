@@ -5,7 +5,7 @@ interface FileSizePreviewProps {
   files: {
     passportPhoto?: File;
     academicDocuments: File[];
-    identificationDocuments: File[];
+    identificationDocument?: File; // Changed from array to single file
   };
   className?: string;
 }
@@ -32,8 +32,8 @@ export const FileSizePreview: React.FC<FileSizePreviewProps> = ({
     if (Array.isArray(files.academicDocuments)) {
       allFiles.push(...files.academicDocuments);
     }
-    if (Array.isArray(files.identificationDocuments)) {
-      allFiles.push(...files.identificationDocuments);
+    if (files.identificationDocument) {
+      allFiles.push(files.identificationDocument);
     }
 
     if (allFiles.length > 0) {
@@ -84,13 +84,11 @@ export const FileSizePreview: React.FC<FileSizePreviewProps> = ({
       });
     }
     
-    // Safely handle identification documents array
-    if (Array.isArray(files.identificationDocuments)) {
-      files.identificationDocuments.forEach((file, index) => {
-        allFiles.push({ 
-          file, 
-          type: `ID Document ${files.identificationDocuments.length > 1 ? index + 1 : ''}`.trim() 
-        });
+    // Handle single identification document
+    if (files.identificationDocument) {
+      allFiles.push({ 
+        file: files.identificationDocument, 
+        type: 'ID Document' 
       });
     }
     

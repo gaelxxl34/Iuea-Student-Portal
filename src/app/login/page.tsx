@@ -212,7 +212,7 @@ function LoginForm() {
                 id="email"
                 value={formData.email}
                 onChange={(e) => handleInputChange('email', e.target.value)}
-                className={`w-full px-3 py-2 rounded-lg border-2 transition-colors text-sm placeholder:text-gray-400 text-black ${
+                className={`w-full px-3 py-2 rounded-lg border-2 transition-colors text-base placeholder:text-gray-400 text-black ${
                   errors.email 
                     ? 'border-red-500 focus:border-red-500' 
                     : 'border-[#EDEDED] focus:border-[#780000]'
@@ -235,7 +235,7 @@ function LoginForm() {
                   id="password"
                   value={formData.password}
                   onChange={(e) => handleInputChange('password', e.target.value)}
-                  className={`w-full px-3 py-2 pr-10 rounded-lg border-2 transition-colors text-sm placeholder:text-gray-400 text-black ${
+                  className={`w-full px-3 py-2 pr-10 rounded-lg border-2 transition-colors text-base placeholder:text-gray-400 text-black ${
                     errors.password 
                       ? 'border-red-500 focus:border-red-500' 
                       : 'border-[#EDEDED] focus:border-[#780000]'

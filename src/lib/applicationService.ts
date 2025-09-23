@@ -83,7 +83,7 @@ export interface Application {
   submittedAt: string;
   updatedAt: string;
   passportPhoto?: string;
-  academicDocuments?: string;
+  academicDocuments?: string[]; // Changed to array to support multiple documents
   identificationDocument?: string;
   // Add sponsor and additional information fields
   sponsorTelephone?: string;
@@ -588,12 +588,14 @@ class StudentApplicationService {
     try {
       console.log(`📤 Uploading ${upload.type} for application ${upload.applicationId}...`);
       
-      // 0. Delete old document first to save storage space
-      try {
-        await this.deleteOldDocument(upload.applicationId, upload.type);
-      } catch (deleteError) {
-        console.warn(`⚠️ Non-critical error deleting old document:`, deleteError);
-        // Continue with upload even if deletion fails
+      // 0. Delete old document first to save storage space (only for single document types)
+      if (upload.type !== 'academicDocuments') {
+        try {
+          await this.deleteOldDocument(upload.applicationId, upload.type);
+        } catch (deleteError) {
+          console.warn(`⚠️ Non-critical error deleting old document:`, deleteError);
+          // Continue with upload even if deletion fails
+        }
       }
       
       // 1. Validate file
@@ -618,6 +620,23 @@ class StudentApplicationService {
         throw new Error(`Invalid file type for ${upload.type}. Allowed: ${allowedTypes[upload.type].join(', ')}`);
       }
 
+      // Check academic documents limit (maximum 5 documents)
+      if (upload.type === 'academicDocuments') {
+        const applicationRef = doc(db, 'applications', upload.applicationId);
+        const applicationDoc = await getDoc(applicationRef);
+        
+        if (applicationDoc.exists()) {
+          const currentData = applicationDoc.data();
+          const currentAcademicDocs = Array.isArray(currentData.academicDocuments) 
+            ? currentData.academicDocuments 
+            : (currentData.academicDocuments ? [currentData.academicDocuments] : []);
+          
+          if (currentAcademicDocs.length >= 5) {
+            throw new Error('Maximum of 5 academic documents allowed. Please remove some documents before uploading new ones.');
+          }
+        }
+      }
+
       // 2. Generate unique filename
       const timestamp = Date.now();
       const fileExtension = upload.file.name.split('.').pop() || 'unknown';
@@ -637,10 +656,41 @@ class StudentApplicationService {
       console.log(`✅ File uploaded successfully: ${downloadUrl}`);
 
       // 5. Update Firestore application document with the public URL
-      const updateData = {
-        [upload.type]: downloadUrl,
+      interface UpdateData {
+        updatedAt: string;
+        academicDocuments?: string[];
+        passportPhoto?: string;
+        identificationDocument?: string;
+        [key: string]: unknown; // Allow additional properties for Firestore
+      }
+
+      const updateData: UpdateData = {
         updatedAt: new Date().toISOString(),
       };
+
+      if (upload.type === 'academicDocuments') {
+        // For academic documents, append to array instead of replacing
+        const applicationRef = doc(db, 'applications', upload.applicationId);
+        const applicationDoc = await getDoc(applicationRef);
+        
+        if (applicationDoc.exists()) {
+          const currentData = applicationDoc.data();
+          const currentAcademicDocs = Array.isArray(currentData.academicDocuments) 
+            ? currentData.academicDocuments 
+            : (currentData.academicDocuments ? [currentData.academicDocuments] : []);
+          
+          console.log(`📎 Current academic documents count: ${currentAcademicDocs.length}`);
+          console.log(`📎 Adding new document: ${downloadUrl}`);
+          updateData.academicDocuments = [...currentAcademicDocs, downloadUrl];
+          console.log(`📎 Total after upload: ${updateData.academicDocuments.length} documents`);
+        } else {
+          console.log(`📎 No existing application found, creating first academic document`);
+          updateData.academicDocuments = [downloadUrl];
+        }
+      } else {
+        // For other document types (passport photo, identification), replace as before
+        updateData[upload.type] = downloadUrl;
+      }
 
       try {
         const applicationRef = doc(db, 'applications', upload.applicationId);
@@ -672,7 +722,7 @@ class StudentApplicationService {
   async submitApplicationWithBackgroundDocuments(data: StudentApplicationData, files?: {
     passportPhoto?: File;
     academicDocuments: File[];
-    identificationDocuments: File[];
+    identificationDocument?: File; // Changed from array to single file
   }): Promise<DirectApplicationResponse & { documentProcessing?: Promise<DocumentUploadResponse[]> }> {
     try {
       console.log('🚀 Starting optimized application submission...');
@@ -687,7 +737,7 @@ class StudentApplicationService {
       // 2. Start document processing in background if files exist
       let documentProcessingPromise: Promise<DocumentUploadResponse[]> | undefined;
       
-      if (files && (files.passportPhoto || files.academicDocuments?.length || files.identificationDocuments?.length)) {
+      if (files && (files.passportPhoto || files.academicDocuments?.length || files.identificationDocument)) {
         console.log('📤 Starting background document processing...');
         
         const uploads: DocumentUpload[] = [];
@@ -711,9 +761,9 @@ class StudentApplicationService {
           });
         }
         
-        if (files.identificationDocuments?.length) {
+        if (files.identificationDocument) {
           uploads.push({
-            file: files.identificationDocuments[0],
+            file: files.identificationDocument,
             type: 'identificationDocument' as const,
             applicationId: applicationResult.applicationId,
             studentEmail: data.email,
@@ -934,6 +984,74 @@ class StudentApplicationService {
   }
 
   /**
+   * Delete a specific academic document by its download URL
+   * - Removes the file from Firebase Storage (best effort)
+   * - Removes the URL from the application's academicDocuments array in Firestore
+   */
+  async deleteAcademicDocument(applicationId: string, documentUrl: string): Promise<{ success: boolean; message: string }> {
+    try {
+      // Fetch application
+      const applicationRef = doc(db, 'applications', applicationId);
+      const applicationDoc = await getDoc(applicationRef);
+      if (!applicationDoc.exists()) {
+        return { success: false, message: `Application ${applicationId} not found` };
+      }
+
+      const data = applicationDoc.data();
+      const currentAcademicDocs: string[] = Array.isArray(data.academicDocuments)
+        ? data.academicDocuments
+        : (data.academicDocuments ? [data.academicDocuments] : []);
+
+      if (!currentAcademicDocs.includes(documentUrl)) {
+        // Proceed to clean up anyway but inform not found in array
+        console.warn('Academic document URL not present in Firestore array, proceeding to attempt storage cleanup.');
+      }
+
+      // Attempt to delete storage object (best effort)
+      try {
+        let storagePath: string | null = null;
+        if (documentUrl.includes('/o/')) {
+          const urlParts = documentUrl.split('/o/')[1]?.split('?')[0];
+          if (urlParts) storagePath = decodeURIComponent(urlParts);
+        } else if (documentUrl.startsWith('gs://')) {
+          storagePath = documentUrl.replace(/^gs:\/\/[^\/]+\//, '');
+        } else if (documentUrl.includes('applications/')) {
+          storagePath = documentUrl;
+        }
+
+        if (storagePath) {
+          const fileRef = ref(storage, storagePath);
+          await deleteObject(fileRef);
+          console.log('✅ Deleted academic document from storage:', storagePath);
+        } else {
+          console.warn('⚠️ Could not parse storage path from academic document URL:', documentUrl);
+        }
+      } catch (storageErr) {
+        // Non-fatal: continue to update Firestore
+        console.warn('⚠️ Failed to delete academic document from storage:', storageErr);
+      }
+
+      // Update Firestore to remove the URL from the array
+      const updatedDocs = currentAcademicDocs.filter((u) => u !== documentUrl);
+      try {
+        await updateDoc(applicationRef, {
+          academicDocuments: updatedDocs,
+          updatedAt: new Date().toISOString(),
+        });
+        console.log(`✅ Removed academic document from Firestore array. New count: ${updatedDocs.length}`);
+      } catch (firestoreErr) {
+        console.error('❌ Failed to update Firestore academicDocuments array:', firestoreErr);
+        return { success: false, message: 'Failed to update application record after deleting document' };
+      }
+
+      return { success: true, message: 'Academic document removed successfully' };
+    } catch (err) {
+      console.error('❌ Error deleting academic document:', err);
+      return { success: false, message: err instanceof Error ? err.message : 'Unknown error' };
+    }
+  }
+
+  /**
    * Generate a unique application ID
    */
   private generateApplicationId(): string {
@@ -993,7 +1111,9 @@ class StudentApplicationService {
           submittedAt: data.submittedAt || '',
           updatedAt: data.updatedAt || '',
           passportPhoto: data.passportPhoto || '',
-          academicDocuments: data.academicDocuments || '',
+          academicDocuments: Array.isArray(data.academicDocuments) 
+            ? data.academicDocuments 
+            : (data.academicDocuments ? [data.academicDocuments] : []), // Handle both array and string for backward compatibility
           identificationDocument: data.identificationDocument || '',
           // Add sponsor and additional information fields
           sponsorTelephone: data.sponsorTelephone || '',

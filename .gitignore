@@ -79,3 +79,6 @@ Thumbs.db
 # Example files
 /public/embed-example.html
 /public/embed-example-with-agent.html
+
+# Specific files to ignore
+src/app/open-portal/page.tsx
