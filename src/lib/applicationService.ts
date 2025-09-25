@@ -13,7 +13,6 @@ import {
   DocumentData,
   QueryDocumentSnapshot,
   writeBatch,
-  orderBy,
   getDoc,
   setDoc,
   deleteDoc,
@@ -296,15 +295,15 @@ class StudentApplicationService {
               try {
                 await updateDoc(draftDoc.ref, { uid: effectiveUid });
                 draftFromFirestore.uid = effectiveUid;
-              } catch (_) {
+              } catch {
                 // Silent fail - we'll continue with the draft we have
               }
             }
           }
-        } catch (_) {
+        } catch {
           // Silent fail - we'll fall back to localStorage
         }
-      } catch (_) {
+      } catch {
         // Silent fail - we'll fall back to localStorage
       }
     }
@@ -319,7 +318,7 @@ class StudentApplicationService {
             JSON.stringify(draftFromFirestore)
           );
         }
-      } catch (_) {
+      } catch {
         // Silent fail - localStorage is just a backup
       }
       
@@ -340,7 +339,7 @@ class StudentApplicationService {
             {...draftFromLocalStorage, id: undefined}
           );
           console.log('✅ Synced localStorage draft to Firestore');
-        } catch (_) {
+        } catch {
           // Silent fail - localStorage is our source of truth here
         }
       }
@@ -384,7 +383,7 @@ class StudentApplicationService {
       try {
         await setDoc(this.getDraftRef(newDraftId), {...newDraft, id: undefined});
         console.log('✅ Created new draft in Firestore:', newDraftId);
-      } catch (_) {
+      } catch {
         // Silent fail - localStorage is our fallback
       }
     }
@@ -414,7 +413,7 @@ class StudentApplicationService {
 
       const draftDoc = snapshot.docs[0];
       return this.mapDraftSnapshot(draftDoc.id, draftDoc.data());
-    } catch (_) {
+    } catch {
       // On any Firestore error, fall back to localStorage
       return this.loadDraftFromLocalStorageByEmail(email);
     }
@@ -558,7 +557,7 @@ class StudentApplicationService {
           data = draftSnapshot.data();
           currentFormData = (data.formData as Partial<StudentApplicationData>) || {};
         }
-      } catch (_) {
+      } catch {
         // Silently handle this error - it's expected with permission issues
         // and we've already saved to localStorage
       }
@@ -575,16 +574,16 @@ class StudentApplicationService {
       try {
         await updateDoc(draftRef, updatePayload);
         console.log('✅ Draft saved to Firestore');
-      } catch (_) {
+      } catch {
         // If update fails, try to create the document
         try {
           await setDoc(draftRef, updatePayload);
           console.log('✅ Created new draft in Firestore');
-        } catch (_) {
+        } catch {
           // Silently handle this error - localStorage backup already worked
         }
       }
-    } catch (_) {
+    } catch {
       // Silently handle Firestore errors - localStorage backup already worked
     }
   }
@@ -628,7 +627,7 @@ class StudentApplicationService {
     let draftSnapshot;
     try {
       draftSnapshot = await getDoc(draftRef);
-    } catch (_) {
+    } catch {
       throw new Error("Failed to access draft application - permission denied");
     }
 
@@ -731,7 +730,7 @@ class StudentApplicationService {
     let draftSnapshot;
     try {
       draftSnapshot = await getDoc(draftRef);
-    } catch (_) {
+    } catch {
       throw new Error("Failed to access draft application - permission denied");
     }
 

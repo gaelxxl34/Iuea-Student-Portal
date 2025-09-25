@@ -417,7 +417,8 @@ export default function ApplicationPage() {
     };
 
     void initialiseDraft();
-  }, [user?.email, user?.uid, submittedApplication, applicationMode]); // Removed showSuccess to prevent infinite loop
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [user?.email, user?.uid, submittedApplication, applicationMode]); // showSuccess omitted to prevent infinite loop
 
   // Track page view and form interactions
   useEffect(() => {
@@ -543,7 +544,8 @@ export default function ApplicationPage() {
         clearTimeout(autosaveTimerRef.current);
       }
     };
-  }, [applicationData, activeSection, user?.email, user?.uid, isDraftLoading, submittedApplication, applicationMode, isSubmitting]); // Removed draftApplication?.id to prevent infinite loop
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [applicationData, activeSection, user?.email, user?.uid, isDraftLoading, submittedApplication, applicationMode, isSubmitting]); // draftApplication?.id omitted to prevent infinite loop
 
   // Check for submitted application
   const checkForSubmittedApplication = useCallback(async () => {
@@ -601,7 +603,8 @@ export default function ApplicationPage() {
     if (user?.uid) {
       checkForSubmittedApplication();
     }
-  }, [user?.uid]); // Removed checkForSubmittedApplication from dependencies to prevent infinite loop
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [user?.uid]); // checkForSubmittedApplication omitted to prevent infinite loop
 
   // Debug effect to log user data
   useEffect(() => {
