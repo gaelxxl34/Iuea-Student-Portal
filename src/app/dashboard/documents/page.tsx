@@ -128,7 +128,7 @@ export default function DocumentsPage() {
     } finally {
       setIsLoading(false);
     }
-  }, [user?.email]);
+  }, [user?.email, selectedApplication]);
 
   // Fetch applications when component mounts
   useEffect(() => {
@@ -571,12 +571,12 @@ export default function DocumentsPage() {
                 >
                   {deletingDocUrl === url ? (
                     <span className="inline-flex items-center">
-                      <i className="ri-loader-4-line mr-1 animate-spin"></i>
+                      <i className="ri-loader-4-line mr-1.5 animate-spin"></i>
                       Removing
                     </span>
                   ) : (
                     <span className="inline-flex items-center">
-                      <i className="ri-delete-bin-line mr-1"></i>
+                      <i className="ri-delete-bin-line mr-1.5"></i>
                       Remove
                     </span>
                   )}

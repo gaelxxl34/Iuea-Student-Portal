@@ -14,7 +14,10 @@ import {
   QueryDocumentSnapshot,
   writeBatch,
   orderBy,
-  getDoc
+  getDoc,
+  setDoc,
+  deleteDoc,
+  limit
 } from 'firebase/firestore';
 import { ref, uploadBytes, getDownloadURL, deleteObject } from 'firebase/storage';
 import { signInAnonymously } from 'firebase/auth';
@@ -92,6 +95,32 @@ export interface Application {
   additionalNotes?: string;
 }
 
+export interface DraftDocumentMetadata {
+  downloadUrl: string;
+  fileName: string;
+  size: number;
+  contentType: string;
+  uploadedAt: string;
+  type: 'passportPhoto' | 'academicDocuments' | 'identificationDocument';
+}
+
+export interface ApplicationDraft {
+  id: string;
+  email: string;
+  uid?: string;
+  status: 'draft';
+  formData: Partial<StudentApplicationData>;
+  activeSection?: string;
+  lastSavedAt?: string;
+  createdAt: string;
+  updatedAt: string;
+  documents: {
+    passportPhoto?: DraftDocumentMetadata;
+    identificationDocument?: DraftDocumentMetadata;
+    academicDocuments: DraftDocumentMetadata[];
+  };
+}
+
 // Lead constants (matching backend)
 export const LEAD_STATUSES = {
   INTERESTED: "INTERESTED",
@@ -148,8 +177,653 @@ export interface DirectApplicationResponse {
 }
 
 class StudentApplicationService {
+  // Cooldown map to avoid spamming permission-denied queries per email
+  private applicationsFetchCooldown: Record<string, number> = {};
+  // One-time flag to avoid noisy logs
+  private hasLoggedApplicationsPermissionDenied = false;
   constructor() {
     console.log('🔧 StudentApplicationService initialized for direct Firebase integration');
+  }
+
+  private getDraftRef(applicationId: string) {
+    return doc(db, 'applicationDrafts', applicationId);
+  }
+
+  private mapDraftSnapshot(applicationId: string, data: DocumentData): ApplicationDraft {
+    const passportPhotoRaw = data.documents?.passportPhoto;
+    const identificationRaw = data.documents?.identificationDocument;
+    const academicRaw = data.documents?.academicDocuments;
+
+    // Note: This function uses undefined for missing fields in the TypeScript model
+    // When writing back to Firestore, convert undefined to null or omit fields entirely,
+    // as Firestore doesn't accept undefined values
+    return {
+      id: applicationId,
+      email: (data.email as string) || '',
+      uid: data.uid as string | undefined,
+      status: 'draft',
+      formData: (data.formData as Partial<StudentApplicationData>) || {},
+      activeSection: data.activeSection as string | undefined,
+      lastSavedAt: data.lastSavedAt as string | undefined,
+      createdAt: (data.createdAt as string) || new Date().toISOString(),
+      updatedAt: (data.updatedAt as string) || new Date().toISOString(),
+      documents: {
+        passportPhoto: passportPhotoRaw && typeof passportPhotoRaw === 'object'
+          ? (passportPhotoRaw as DraftDocumentMetadata)
+          : undefined,
+        identificationDocument: identificationRaw && typeof identificationRaw === 'object'
+          ? (identificationRaw as DraftDocumentMetadata)
+          : undefined,
+        academicDocuments: Array.isArray(academicRaw)
+          ? (academicRaw as DraftDocumentMetadata[])
+          : [],
+      },
+    };
+  }
+
+  async ensureDraftApplication(email: string, uid?: string): Promise<ApplicationDraft> {
+    // Create a hybrid approach that works with both Firestore and localStorage
+    const normalizedEmail = email.trim().toLowerCase();
+    const effectiveUid = uid ?? auth.currentUser?.uid;
+    const applicationId = this.generateApplicationId();
+    const now = new Date().toISOString();
+    let draftFromFirestore: ApplicationDraft | null = null;
+    let draftFromLocalStorage: ApplicationDraft | null = null;
+
+    // Try to find a draft in localStorage first
+    try {
+      if (typeof window !== 'undefined') {
+        // Look for any localStorage keys that might contain this user's draft
+        const possibleKeys: string[] = [];
+        
+        // Scan localStorage for potential draft keys
+        for (let i = 0; i < localStorage.length; i++) {
+          const key = localStorage.key(i);
+          if (key?.startsWith('application_draft_')) {
+            possibleKeys.push(key);
+          }
+        }
+        
+        // Check each possible draft for matching email
+        for (const key of possibleKeys) {
+          try {
+            const savedDraft = JSON.parse(localStorage.getItem(key) || '{}');
+            if (savedDraft?.formData?.email === normalizedEmail || 
+                savedDraft?.email === normalizedEmail) {
+              
+              // Found a matching draft
+              draftFromLocalStorage = {
+                id: key.replace('application_draft_', ''),
+                email: normalizedEmail,
+                uid: effectiveUid,
+                status: 'draft',
+                formData: savedDraft.formData || {},
+                activeSection: savedDraft.activeSection || 'personal',
+                lastSavedAt: savedDraft.lastSavedAt || now,
+                createdAt: savedDraft.createdAt || now,
+                updatedAt: now,
+                documents: savedDraft.documents || { academicDocuments: [] },
+              };
+              break;
+            }
+          } catch (parseError) {
+            console.warn('Failed to parse localStorage draft:', parseError);
+          }
+        }
+      }
+    } catch (localStorageError) {
+      console.warn('Error accessing localStorage:', localStorageError);
+    }
+
+    // Try to get draft from Firestore if possible (but don't fail if it doesn't work)
+    // Use our silent authentication check to avoid unnecessary errors
+    const isAuthenticated = await this.ensureAuthenticated(true);
+    if (isAuthenticated) {
+      try {
+        const draftsRef = collection(db, 'applicationDrafts');
+        const draftQuery = query(draftsRef, where('email', '==', normalizedEmail), where('uid', '==', effectiveUid), limit(1));
+        
+        try {
+          const snapshot = await getDocs(draftQuery);
+          
+          if (!snapshot.empty) {
+            const draftDoc = snapshot.docs[0];
+            const draftData = draftDoc.data();
+            draftFromFirestore = this.mapDraftSnapshot(draftDoc.id, draftData);
+            
+            // Update the UID if needed
+            if (!draftFromFirestore.uid || draftFromFirestore.uid !== effectiveUid) {
+              try {
+                await updateDoc(draftDoc.ref, { uid: effectiveUid });
+                draftFromFirestore.uid = effectiveUid;
+              } catch (_) {
+                // Silent fail - we'll continue with the draft we have
+              }
+            }
+          }
+        } catch (_) {
+          // Silent fail - we'll fall back to localStorage
+        }
+      } catch (_) {
+        // Silent fail - we'll fall back to localStorage
+      }
+    }
+
+    // If we have a Firestore draft, use it (it takes priority)
+    if (draftFromFirestore) {
+      // Also update localStorage with this draft for redundancy
+      try {
+        if (typeof window !== 'undefined') {
+          localStorage.setItem(
+            `application_draft_${draftFromFirestore.id}`, 
+            JSON.stringify(draftFromFirestore)
+          );
+        }
+      } catch (_) {
+        // Silent fail - localStorage is just a backup
+      }
+      
+      console.log('✅ Found existing draft in Firestore:', draftFromFirestore.id);
+      return draftFromFirestore;
+    }
+    
+    // If we have a localStorage draft, use it
+    if (draftFromLocalStorage) {
+      console.log('✅ Found existing draft in localStorage:', draftFromLocalStorage.id);
+      
+      // Try to sync this to Firestore if possible (but don't fail if it doesn't work)
+      const isAuthenticated = await this.ensureAuthenticated(true);
+      if (isAuthenticated) {
+        try {
+          await setDoc(
+            this.getDraftRef(draftFromLocalStorage.id), 
+            {...draftFromLocalStorage, id: undefined}
+          );
+          console.log('✅ Synced localStorage draft to Firestore');
+        } catch (_) {
+          // Silent fail - localStorage is our source of truth here
+        }
+      }
+      
+      return draftFromLocalStorage;
+    }
+    
+    // Create a new draft in both localStorage and Firestore
+    const newDraftId = applicationId;
+    const newDraft: ApplicationDraft = {
+      id: newDraftId,
+      email: normalizedEmail,
+      uid: effectiveUid,
+      status: 'draft',
+      formData: {},
+      activeSection: 'personal',
+      lastSavedAt: now,
+      createdAt: now,
+      updatedAt: now,
+      documents: {
+        academicDocuments: [],
+      },
+    };
+    
+    // Save to localStorage first (this should always work)
+    try {
+      if (typeof window !== 'undefined') {
+        localStorage.setItem(
+          `application_draft_${newDraftId}`, 
+          JSON.stringify(newDraft)
+        );
+        console.log('✅ Created new draft in localStorage:', newDraftId);
+      }
+    } catch (localSaveError) {
+      console.warn('Could not save new draft to localStorage:', localSaveError);
+    }
+    
+    // Try to save to Firestore if possible (but don't fail if it doesn't work)
+    const isAuthenticatedForCreate = await this.ensureAuthenticated(true);
+    if (isAuthenticatedForCreate) {
+      try {
+        await setDoc(this.getDraftRef(newDraftId), {...newDraft, id: undefined});
+        console.log('✅ Created new draft in Firestore:', newDraftId);
+      } catch (_) {
+        // Silent fail - localStorage is our fallback
+      }
+    }
+    
+    return newDraft;
+  }
+
+  async loadDraftByEmail(email: string): Promise<ApplicationDraft | null> {
+    // Check for authentication silently
+    const isAuthenticated = await this.ensureAuthenticated(true);
+    if (!isAuthenticated) {
+      // If not authenticated, check localStorage instead
+      return this.loadDraftFromLocalStorageByEmail(email);
+    }
+
+    try {
+      const normalizedEmail = email.toLowerCase();
+      const draftsRef = collection(db, 'applicationDrafts');
+      // Only query drafts owned by current user
+      const draftQuery = query(draftsRef, where('email', '==', normalizedEmail), where('uid', '==', auth.currentUser?.uid), limit(1));
+      const snapshot = await getDocs(draftQuery);
+
+      if (snapshot.empty) {
+        // If not in Firestore, try localStorage
+        return this.loadDraftFromLocalStorageByEmail(email);
+      }
+
+      const draftDoc = snapshot.docs[0];
+      return this.mapDraftSnapshot(draftDoc.id, draftDoc.data());
+    } catch (_) {
+      // On any Firestore error, fall back to localStorage
+      return this.loadDraftFromLocalStorageByEmail(email);
+    }
+  }
+  
+  private loadDraftFromLocalStorageByEmail(email: string): ApplicationDraft | null {
+    if (typeof window === 'undefined') {
+      return null;
+    }
+    
+    const normalizedEmail = email.toLowerCase();
+    
+    // Look for any localStorage keys that might contain this user's draft
+    const possibleKeys: string[] = [];
+    
+    // Scan localStorage for potential draft keys
+    for (let i = 0; i < localStorage.length; i++) {
+      const key = localStorage.key(i);
+      if (key?.startsWith('application_draft_')) {
+        possibleKeys.push(key);
+      }
+    }
+    
+    // Check each possible draft for matching email
+    for (const key of possibleKeys) {
+      try {
+        const savedDraft = JSON.parse(localStorage.getItem(key) || '{}');
+        if (savedDraft?.formData?.email === normalizedEmail || 
+            savedDraft?.email === normalizedEmail) {
+          
+          const now = new Date().toISOString();
+          // Found a matching draft
+          return {
+            id: key.replace('application_draft_', ''),
+            email: normalizedEmail,
+            uid: auth.currentUser?.uid,
+            status: 'draft',
+            formData: savedDraft.formData || {},
+            activeSection: savedDraft.activeSection || 'personal',
+            lastSavedAt: savedDraft.lastSavedAt || now,
+            createdAt: savedDraft.createdAt || now,
+            updatedAt: now,
+            documents: savedDraft.documents || { academicDocuments: [] },
+          };
+        }
+      } catch (parseError) {
+        console.warn('Failed to parse localStorage draft:', parseError);
+      }
+    }
+    
+    return null;
+  }
+
+  /**
+   * Get draft document metadata from a draft application
+   * This allows the UI to display previously uploaded documents after page refresh
+   */
+  async getDraftDocuments(draftId: string): Promise<{
+    academicDocuments: DraftDocumentMetadata[];
+    passportPhoto?: DraftDocumentMetadata;
+    identificationDocument?: DraftDocumentMetadata;
+  } | null> {
+    try {
+      // First check if the draft exists
+      const draftRef = this.getDraftRef(draftId);
+      const draftSnapshot = await getDoc(draftRef);
+      
+      if (!draftSnapshot.exists()) {
+        console.warn('⚠️ Draft documents not found, draft does not exist:', draftId);
+        return null;
+      }
+      
+      const data = draftSnapshot.data();
+      const documents = data.documents || {};
+      
+      // Return the documents structure with proper typing
+      return {
+        academicDocuments: Array.isArray(documents.academicDocuments) 
+          ? documents.academicDocuments 
+          : [],
+        passportPhoto: documents.passportPhoto || undefined,
+        identificationDocument: documents.identificationDocument || undefined
+      };
+    } catch (error) {
+      console.error('❌ Failed to get draft documents:', error);
+      return null;
+    }
+  }
+  
+  async saveDraft(applicationId: string, payload: {
+    formData: Partial<StudentApplicationData>;
+    activeSection?: string;
+    lastSavedAt?: string;
+  }): Promise<void> {
+    // Try to save to both Firestore (if possible) and localStorage
+    const now = new Date().toISOString();
+    
+    // Save to localStorage first (this always works)
+    try {
+      // Create localStorage backup
+      if (typeof window !== 'undefined') {
+        const localStorageKey = `application_draft_${applicationId}`;
+        const existingData = localStorage.getItem(localStorageKey);
+        const currentData = existingData ? JSON.parse(existingData) : {};
+        
+        const localStoragePayload = {
+          id: applicationId,
+          formData: { ...(currentData.formData || {}), ...payload.formData },
+          activeSection: payload.activeSection || currentData.activeSection || 'personal',
+          lastSavedAt: payload.lastSavedAt || now,
+          updatedAt: now,
+        };
+        
+        localStorage.setItem(localStorageKey, JSON.stringify(localStoragePayload));
+        console.log('💾 Draft saved to localStorage', { id: applicationId });
+      }
+    } catch (localError) {
+      console.error('❌ Failed to save draft to localStorage:', localError);
+    }
+    
+    // Then try to save to Firestore - using silent auth check to avoid unnecessary errors
+    const isAuthenticated = await this.ensureAuthenticated(true);
+    if (!isAuthenticated) {
+      // Silently exit after localStorage save - no need for console warnings
+      return;
+    }
+    
+    try {
+      // Validate applicationId
+      if (!applicationId || applicationId.trim().length === 0) {
+        return; // Exit silently after localStorage save
+      }
+
+      const draftRef = this.getDraftRef(applicationId);
+      let data: DocumentData = {};
+      let currentFormData = {};
+      
+      try {
+        const draftSnapshot = await getDoc(draftRef);
+        if (draftSnapshot.exists()) {
+          data = draftSnapshot.data();
+          currentFormData = (data.formData as Partial<StudentApplicationData>) || {};
+        }
+      } catch (_) {
+        // Silently handle this error - it's expected with permission issues
+        // and we've already saved to localStorage
+      }
+
+      const updatePayload = {
+        formData: { ...currentFormData, ...payload.formData },
+        activeSection: payload.activeSection ?? data.activeSection ?? 'personal',
+        lastSavedAt: payload.lastSavedAt ?? now,
+        updatedAt: now,
+        email: data.email || auth.currentUser?.email?.toLowerCase(),
+        uid: data.uid || auth.currentUser?.uid,
+      };
+
+      try {
+        await updateDoc(draftRef, updatePayload);
+        console.log('✅ Draft saved to Firestore');
+      } catch (_) {
+        // If update fails, try to create the document
+        try {
+          await setDoc(draftRef, updatePayload);
+          console.log('✅ Created new draft in Firestore');
+        } catch (_) {
+          // Silently handle this error - localStorage backup already worked
+        }
+      }
+    } catch (_) {
+      // Silently handle Firestore errors - localStorage backup already worked
+    }
+  }
+
+  private async deleteExistingDraftDocumentFile(applicationId: string, metadata?: DraftDocumentMetadata) {
+    if (!metadata) return;
+
+    try {
+      let storagePath: string | null = null;
+
+      if (metadata.downloadUrl.includes('/o/')) {
+        const urlParts = metadata.downloadUrl.split('/o/')[1]?.split('?')[0];
+        if (urlParts) storagePath = decodeURIComponent(urlParts);
+      } else if (metadata.downloadUrl.startsWith('gs://')) {
+        storagePath = metadata.downloadUrl.replace(/^gs:\/\/[^\/]+\//, '');
+      } else if (metadata.downloadUrl.includes('applications/')) {
+        storagePath = metadata.downloadUrl;
+      }
+
+      if (!storagePath) {
+        console.warn('⚠️ Unable to derive storage path for draft document:', metadata.downloadUrl);
+        return;
+      }
+
+      const fileRef = ref(storage, storagePath);
+      await deleteObject(fileRef);
+      console.log('🧹 Deleted draft document from storage:', storagePath);
+    } catch (error) {
+      console.warn('⚠️ Failed to delete draft document file:', error);
+    }
+  }
+
+  async uploadDraftDocument(upload: DocumentUpload): Promise<DraftDocumentMetadata> {
+    // Check for authentication
+    const isAuthenticated = await this.ensureAuthenticated(true);
+    if (!isAuthenticated) {
+      throw new Error("Unable to upload document - authentication required");
+    }
+
+    const draftRef = this.getDraftRef(upload.applicationId);
+    let draftSnapshot;
+    try {
+      draftSnapshot = await getDoc(draftRef);
+    } catch (_) {
+      throw new Error("Failed to access draft application - permission denied");
+    }
+
+    if (!draftSnapshot.exists()) {
+      throw new Error('Draft application not found');
+    }
+
+    if (!upload.file || upload.file.size === 0) {
+      throw new Error('No file provided or file is empty');
+    }
+
+    const maxSize = 10 * 1024 * 1024;
+    if (upload.file.size > maxSize) {
+      throw new Error('File size must be less than 10MB');
+    }
+
+    const allowedTypes = {
+      passportPhoto: ['image/jpeg', 'image/jpg', 'image/png'],
+      academicDocuments: ['application/pdf', 'image/jpeg', 'image/jpg', 'image/png'],
+      identificationDocument: ['application/pdf', 'image/jpeg', 'image/jpg', 'image/png'],
+    } satisfies Record<DocumentUpload['type'], string[]>;
+
+    if (!allowedTypes[upload.type].includes(upload.file.type)) {
+      throw new Error(`Invalid file type for ${upload.type}. Allowed: ${allowedTypes[upload.type].join(', ')}`);
+    }
+
+    const draftData = this.mapDraftSnapshot(upload.applicationId, draftSnapshot.data());
+
+    if (upload.type === 'academicDocuments' && draftData.documents.academicDocuments.length >= 5) {
+      throw new Error('Maximum of 5 academic documents allowed. Please remove some documents before uploading new ones.');
+    }
+
+    if (upload.type !== 'academicDocuments') {
+      await this.deleteExistingDraftDocumentFile(upload.applicationId, draftData.documents[upload.type]);
+    }
+
+    const timestamp = Date.now();
+    const fileExtension = upload.file.name.split('.').pop() || 'unknown';
+    const sanitizedEmail = upload.studentEmail.replace(/[^a-zA-Z0-9]/g, '_');
+    const fileName = `draft_${upload.type}_${upload.applicationId}_${sanitizedEmail}_${timestamp}.${fileExtension}`;
+    const storagePath = `applications/${upload.applicationId}/documents/${fileName}`;
+
+    const storageRef = ref(storage, storagePath);
+    const uploadTask = await uploadBytes(storageRef, upload.file);
+    const downloadUrl = await getDownloadURL(uploadTask.ref);
+
+    const metadata: DraftDocumentMetadata = {
+      downloadUrl,
+      fileName,
+      size: upload.file.size,
+      contentType: upload.file.type,
+      uploadedAt: new Date().toISOString(),
+      type: upload.type,
+    };
+
+    // Create a clean documents object for Firebase with no undefined values
+    const documentsUpdate: {
+      academicDocuments: DraftDocumentMetadata[];
+      passportPhoto?: DraftDocumentMetadata | null;
+      identificationDocument?: DraftDocumentMetadata | null;
+    } = {
+      // Always include academicDocuments as an array
+      academicDocuments: [...(draftData.documents.academicDocuments || [])],
+    };
+    
+    // Only include defined properties for passport photo and ID document
+    if (draftData.documents.passportPhoto || upload.type === 'passportPhoto') {
+      documentsUpdate.passportPhoto = upload.type === 'passportPhoto' 
+        ? metadata 
+        : draftData.documents.passportPhoto || null;
+    }
+    
+    if (draftData.documents.identificationDocument || upload.type === 'identificationDocument') {
+      documentsUpdate.identificationDocument = upload.type === 'identificationDocument'
+        ? metadata
+        : draftData.documents.identificationDocument || null;
+    }
+    
+    // Add the new document to the appropriate collection
+    if (upload.type === 'academicDocuments') {
+      documentsUpdate.academicDocuments.push(metadata);
+    }
+
+    await updateDoc(draftRef, {
+      documents: documentsUpdate,
+      updatedAt: new Date().toISOString(),
+    });
+
+    return metadata;
+  }
+
+  async deleteDraftDocument(applicationId: string, documentType: 'passportPhoto' | 'academicDocuments' | 'identificationDocument', downloadUrl?: string): Promise<void> {
+    // Check for authentication
+    const isAuthenticated = await this.ensureAuthenticated(true);
+    if (!isAuthenticated) {
+      throw new Error("Unable to delete document - authentication required");
+    }
+
+    const draftRef = this.getDraftRef(applicationId);
+    let draftSnapshot;
+    try {
+      draftSnapshot = await getDoc(draftRef);
+    } catch (_) {
+      throw new Error("Failed to access draft application - permission denied");
+    }
+
+    if (!draftSnapshot.exists()) {
+      throw new Error('Draft application not found');
+    }
+
+    const draftData = this.mapDraftSnapshot(applicationId, draftSnapshot.data());
+
+    if (documentType === 'academicDocuments') {
+      // Handle academic documents separately since they're an array
+      const filtered = draftData.documents.academicDocuments.filter((doc) => doc.downloadUrl !== downloadUrl);
+
+      const removedItems = draftData.documents.academicDocuments.filter((doc) => doc.downloadUrl === downloadUrl);
+      await Promise.all(removedItems.map((item) => this.deleteExistingDraftDocumentFile(applicationId, item)));
+
+      await updateDoc(draftRef, {
+        'documents.academicDocuments': filtered,
+        updatedAt: new Date().toISOString(),
+      });
+      return;
+    }
+
+    // Handle single document types (passportPhoto, identificationDocument)
+    const metadata = draftData.documents[documentType];
+    await this.deleteExistingDraftDocumentFile(applicationId, metadata);
+    
+    // Create a clean update for Firestore that avoids undefined values
+    const updatePayload: Record<string, string | null | number | boolean | Date> = {
+      updatedAt: new Date().toISOString(),
+    };
+    
+    // Set the field to null explicitly (not undefined)
+    updatePayload[`documents.${documentType}`] = null;
+    
+    await updateDoc(draftRef, updatePayload);
+  }
+
+  async deleteDraft(applicationId: string, options?: { removeFiles?: boolean }): Promise<void> {
+    await this.ensureAuthenticated();
+
+    const draftRef = this.getDraftRef(applicationId);
+    const draftSnapshot = await getDoc(draftRef);
+
+    if (!draftSnapshot.exists()) {
+      return;
+    }
+
+    const draftData = this.mapDraftSnapshot(applicationId, draftSnapshot.data());
+
+    if (options?.removeFiles) {
+      const deletions: Promise<void>[] = [];
+
+      if (draftData.documents.passportPhoto) {
+        deletions.push(this.deleteExistingDraftDocumentFile(applicationId, draftData.documents.passportPhoto));
+      }
+      if (draftData.documents.identificationDocument) {
+        deletions.push(this.deleteExistingDraftDocumentFile(applicationId, draftData.documents.identificationDocument));
+      }
+      draftData.documents.academicDocuments.forEach((item) => {
+        deletions.push(this.deleteExistingDraftDocumentFile(applicationId, item));
+      });
+
+      await Promise.all(deletions);
+    }
+
+    await deleteDoc(draftRef);
+  }
+
+  async promoteDraftToSubmitted(applicationId: string, data: StudentApplicationData): Promise<DirectApplicationResponse> {
+    await this.ensureAuthenticated();
+
+    const draftRef = this.getDraftRef(applicationId);
+    const draftSnapshot = await getDoc(draftRef);
+
+    if (!draftSnapshot.exists()) {
+      throw new Error('Draft application not found');
+    }
+
+    const draft = this.mapDraftSnapshot(applicationId, draftSnapshot.data());
+
+    const response = await this.createApplicationAndLead(data, {
+      applicationId,
+      documents: draft.documents,
+      createdAt: draft.createdAt,
+      submittedAt: new Date().toISOString(),
+    });
+
+    // Remove draft document but keep files as they are now referenced by the submitted application
+    await this.deleteDraft(applicationId, { removeFiles: false });
+
+    return response;
   }
 
   /**
@@ -157,7 +831,16 @@ class StudentApplicationService {
    * Uses Firebase client SDK with proper authentication
    * Updates existing leads from INTERESTED to APPLIED if they exist
    */
-  async createApplicationAndLead(data: StudentApplicationData): Promise<DirectApplicationResponse> {
+  async createApplicationAndLead(
+    data: StudentApplicationData,
+    options?: {
+      applicationId?: string;
+      documents?: ApplicationDraft['documents'];
+      status?: keyof typeof APPLICATION_STATUSES;
+      createdAt?: string;
+      submittedAt?: string;
+    }
+  ): Promise<DirectApplicationResponse> {
     try {
       console.log('🎯 Creating application and checking for existing lead...');
       
@@ -165,7 +848,10 @@ class StudentApplicationService {
       await this.ensureAuthenticated();
       
       const currentTime = new Date();
-      const applicationId = this.generateApplicationId();
+      const applicationId = options?.applicationId ?? this.generateApplicationId();
+      const applicationStatus = options?.status ?? APPLICATION_STATUSES.APPLIED;
+      const createdAt = options?.createdAt ?? currentTime.toISOString();
+      const submittedAt = options?.submittedAt ?? currentTime.toISOString();
       
       // 🔍 Check if a lead already exists for this email or phone
       const existingLead = await this.findExistingLead(data.email, data.phone);
@@ -184,14 +870,17 @@ class StudentApplicationService {
       
       // Prepare application data (matching backend structure exactly)
       const applicationData = {
+        // Authentication/Ownership fields (required for Firestore security rules)
+        uid: auth.currentUser?.uid,
+        email: data.email.toLowerCase(),
+
         // Personal Information
         name: `${data.firstName} ${data.lastName}`,
         countryOfBirth: data.countryOfBirth,
         dateOfBirth: data.dateOfBirth || null,
         gender: data.gender,
-        email: data.email.toLowerCase(),
         phoneNumber: data.phone,
-        passportPhoto: null, // Will be populated when uploaded
+        passportPhoto: options?.documents?.passportPhoto?.downloadUrl ?? null,
         postalAddress: data.postalAddress || null,
 
         // Initially null - will be populated with user information by the service
@@ -203,8 +892,8 @@ class StudentApplicationService {
         preferredIntake: data.preferredIntake,
         preferredProgram: data.preferredProgram,
         secondaryProgram: null,
-        academicDocuments: [], // Will be populated when uploaded
-        identificationDocument: null, // Will be populated when uploaded
+        academicDocuments: options?.documents?.academicDocuments?.map((doc) => doc.downloadUrl) ?? [],
+        identificationDocument: options?.documents?.identificationDocument?.downloadUrl ?? null,
 
         // Sponsorship Information
         sponsor: null,
@@ -214,9 +903,9 @@ class StudentApplicationService {
         additionalNotes: data.additionalNotes || null,
 
         // Application Meta
-        status: APPLICATION_STATUSES.APPLIED,
-        submittedAt: currentTime.toISOString(),
-        createdAt: currentTime.toISOString(),
+        status: applicationStatus,
+        submittedAt,
+        createdAt,
         updatedAt: currentTime.toISOString(),
 
         // Application stage - defaults to "new"
@@ -245,6 +934,10 @@ class StudentApplicationService {
 
       // Prepare lead data (matching backend structure exactly)
       const leadData = {
+        // Authentication/Ownership fields (required for Firestore security rules)
+        uid: auth.currentUser?.uid,
+        email: data.email.toLowerCase(),
+
         // Basic Info
         status: LEAD_STATUSES.APPLIED,
         source: existingLead?.source || LEAD_SOURCES.APPLICATION_FORM,
@@ -254,7 +947,6 @@ class StudentApplicationService {
         // Contact Info
         name: `${data.firstName} ${data.lastName}`,
         phone: data.phone,
-        email: data.email.toLowerCase(),
         whatsappNumber: data.phone,
 
         // Application Info
@@ -329,20 +1021,59 @@ class StudentApplicationService {
   }
 
   /**
-   * Ensure user is authenticated, sign in anonymously if not
+   * Ensure user is authenticated with proper credentials (not anonymous)
+   * @param silent If true, returns false instead of throwing an error if authentication fails
+   * @returns true if authenticated, false if silent mode and auth failed
    */
-  private async ensureAuthenticated(): Promise<void> {
+  private async ensureAuthenticated(silent = false): Promise<boolean> {
     try {
       if (!auth.currentUser) {
-        console.log('🔐 User not authenticated, signing in anonymously...');
-        await signInAnonymously(auth);
-        console.log('✅ Anonymous authentication successful');
-      } else {
-        console.log('✅ User already authenticated:', auth.currentUser.email || 'anonymous');
+        if (silent) return false;
+        throw new Error('User must be authenticated to perform this operation. Please sign in first.');
       }
+      
+      // Check if user is anonymous (not allowed for draft operations)
+      if (auth.currentUser.isAnonymous) {
+        if (silent) return false;
+        throw new Error('Anonymous users cannot save drafts. Please sign in or create an account.');
+      }
+      
+      // Check if user has an email (required for Firestore security rules)
+      if (!auth.currentUser.email) {
+        if (silent) return false;
+        throw new Error('User email is required for this operation. Please ensure your account has a verified email.');
+      }
+      
+      // Debug: Check user authentication details in non-silent mode only
+      if (!silent) {
+        console.log('🔍 Current user:', {
+          uid: auth.currentUser.uid,
+          email: auth.currentUser.email,
+          emailVerified: auth.currentUser.emailVerified
+        });
+        
+        // Get and debug the ID token
+        try {
+          // Token is fetched but only tokenResult is used
+          await auth.currentUser.getIdToken();
+          const tokenResult = await auth.currentUser.getIdTokenResult();
+          console.log('🔍 Token claims:', {
+            email: tokenResult.claims.email,
+            email_verified: tokenResult.claims.email_verified,
+            uid: tokenResult.claims.sub
+          });
+        } catch (tokenError) {
+          console.warn('⚠️ Error getting token (non-critical):', tokenError);
+        }
+        
+        console.log('✅ User authenticated:', auth.currentUser.email);
+      }
+      
+      return true;
     } catch (error) {
-      console.error('❌ Authentication failed:', error);
-      throw new Error('Authentication failed. Please try again.');
+      if (silent) return false;
+      console.error('❌ Authentication check failed:', error);
+      throw error;
     }
   }
 
@@ -382,10 +1113,11 @@ class StudentApplicationService {
       
       const leadsRef = collection(db, 'leads');
       
-      // First, try to find by email (primary identifier)
+      // First, try to find by email (primary identifier) AND user ownership
       const emailQuery = query(
         leadsRef,
-        where('email', '==', email.toLowerCase())
+        where('email', '==', email.toLowerCase()),
+        where('uid', '==', auth.currentUser?.uid)
       );
       
       const emailSnapshot = await getDocs(emailQuery);
@@ -411,10 +1143,11 @@ class StudentApplicationService {
         };
       }
       
-      // If no email match, try to find by phone number
+      // If no email match, try to find by phone number AND user ownership
       const phoneQuery = query(
         leadsRef,
-        where('phone', '==', phone)
+        where('phone', '==', phone),
+        where('uid', '==', auth.currentUser?.uid)
       );
       
       const phoneSnapshot = await getDocs(phoneQuery);
@@ -1072,26 +1805,35 @@ class StudentApplicationService {
    */
   async getApplicationsByEmail(email: string): Promise<Application[]> {
     try {
-      console.log('🔍 Fetching applications for email:', email);
-      
-      // Ensure user is authenticated
-      await this.ensureAuthenticated();
-      
-      // Query applications collection by email
-      const applicationsRef = collection(db, 'applications');
-      const q = query(
-        applicationsRef, 
-        where('email', '==', email.toLowerCase()),
-        orderBy('submittedAt', 'desc')
-      );
-      
-      const querySnapshot = await getDocs(q);
-      
-      if (querySnapshot.empty) {
-        console.log('📭 No applications found for user');
+      // Use silent auth to avoid noisy logs; return empty if not authenticated
+      const isAuthed = await this.ensureAuthenticated(true);
+      if (!isAuthed || !auth.currentUser?.email) {
         return [];
       }
-      
+
+      const currentUserEmail = auth.currentUser.email.toLowerCase();
+      const requestedEmail = email.toLowerCase();
+
+      // Only allow querying for own applications to satisfy common Firestore rules
+      if (currentUserEmail !== requestedEmail) {
+        return [];
+      }
+
+      // Cooldown after permission-denied to prevent repeated failed calls
+      const cooldownUntil = this.applicationsFetchCooldown[requestedEmail] ?? 0;
+      if (Date.now() < cooldownUntil) {
+        return [];
+      }
+
+      // Query by email and uid for ownership validation
+      const applicationsRef = collection(db, 'applications');
+      const q = query(applicationsRef, where('email', '==', requestedEmail), where('uid', '==', auth.currentUser.uid));
+      const querySnapshot = await getDocs(q);
+
+      if (querySnapshot.empty) {
+        return [];
+      }
+
       const applications: Application[] = [];
       querySnapshot.forEach((doc: QueryDocumentSnapshot<DocumentData>) => {
         const data = doc.data();
@@ -1111,24 +1853,34 @@ class StudentApplicationService {
           submittedAt: data.submittedAt || '',
           updatedAt: data.updatedAt || '',
           passportPhoto: data.passportPhoto || '',
-          academicDocuments: Array.isArray(data.academicDocuments) 
-            ? data.academicDocuments 
-            : (data.academicDocuments ? [data.academicDocuments] : []), // Handle both array and string for backward compatibility
+          academicDocuments: Array.isArray(data.academicDocuments)
+            ? data.academicDocuments
+            : (data.academicDocuments ? [data.academicDocuments] : []),
           identificationDocument: data.identificationDocument || '',
-          // Add sponsor and additional information fields
           sponsorTelephone: data.sponsorTelephone || '',
           sponsorEmail: data.sponsorEmail || '',
           howDidYouHear: data.howDidYouHear || '',
           additionalNotes: data.additionalNotes || '',
         });
       });
-      
-      console.log(`✅ Found ${applications.length} applications for user`);
+
+      // Sort by submittedAt desc client-side
+      applications.sort((a, b) => new Date(b.submittedAt).getTime() - new Date(a.submittedAt).getTime());
       return applications;
-      
-    } catch (error) {
-      console.error('❌ Failed to fetch applications:', error);
-      // Return empty array to avoid blocking UI
+
+    } catch (error: unknown) {
+      // Suppress noisy console errors; set a short cooldown on permission-denied
+      const code = (error && typeof error === 'object' && 'code' in error) ? (error as { code?: string }).code : undefined;
+      if (code === 'permission-denied') {
+        const key = auth.currentUser?.email?.toLowerCase() || 'unknown';
+        // 2-minute cooldown
+        this.applicationsFetchCooldown[key] = Date.now() + 2 * 60 * 1000;
+        if (!this.hasLoggedApplicationsPermissionDenied) {
+          // Log once as info to aid debugging without spamming the console
+          console.info('ℹ️ Applications query denied by Firestore rules. Falling back to empty list.');
+          this.hasLoggedApplicationsPermissionDenied = true;
+        }
+      }
       return [];
     }
   }

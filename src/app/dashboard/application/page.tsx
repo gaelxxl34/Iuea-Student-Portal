@@ -1,12 +1,12 @@
 'use client';
 
-import { useState, useEffect, useCallback } from 'react';
+import { useState, useEffect, useCallback, useRef } from 'react';
 import Link from 'next/link';
 import PhoneInput from 'react-phone-number-input';
 import { isValidPhoneNumber } from 'react-phone-number-input';
 import 'react-phone-number-input/style.css';
 import { useAuth } from '@/contexts/AuthContext';
-import { studentApplicationService, type Application, type StudentApplicationData } from '@/lib/applicationService';
+import { studentApplicationService, type Application, type StudentApplicationData, type DraftDocumentMetadata, type DocumentUpload, type ApplicationDraft } from '@/lib/applicationService';
 import { ApplicationSkeleton, ApplicationViewSkeleton } from '@/components/skeletons/ApplicationSkeleton';
 import { ToastContainer, useToast } from '@/components/Toast';
 import ProgressIndicator from '@/components/ui/progress-indicator';
@@ -73,6 +73,37 @@ export default function ApplicationPage() {
   const [isEditing, setIsEditing] = useState(true);
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [deletingDocUrl, setDeletingDocUrl] = useState<string | null>(null);
+  const [deletingDocuments, setDeletingDocuments] = useState<{
+    passportPhoto: boolean;
+    identificationDocument: boolean;
+    academicDocuments: Set<number>;
+  }>({
+    passportPhoto: false,
+    identificationDocument: false,
+    academicDocuments: new Set()
+  });
+  const [uploadingDocuments, setUploadingDocuments] = useState<{
+    passportPhoto: boolean;
+    identificationDocument: boolean;
+    academicDocuments: boolean;
+  }>({
+    passportPhoto: false,
+    identificationDocument: false,
+    academicDocuments: false
+  });
+  const [draftApplication, setDraftApplication] = useState<ApplicationDraft | null>(null);
+  const [draftId, setDraftId] = useState<string | null>(null);
+  const [isLoadingDraftDocuments, setIsLoadingDraftDocuments] = useState(false);
+  const [draftDocuments, setDraftDocuments] = useState<{
+    passportPhoto?: DraftDocumentMetadata;
+    identificationDocument?: DraftDocumentMetadata;
+    academicDocuments: DraftDocumentMetadata[];
+  }>({ academicDocuments: [] });
+  const [autosaveStatus, setAutosaveStatus] = useState<'idle' | 'saving' | 'saved' | 'error'>('idle');
+  const [lastAutosaveAt, setLastAutosaveAt] = useState<Date | null>(null);
+  const autosaveTimerRef = useRef<NodeJS.Timeout | null>(null);
+  const [isDraftLoading, setIsDraftLoading] = useState<boolean>(true);
+  const [draftError, setDraftError] = useState<string | null>(null);
   
   // Payment state - TEMPORARILY DISABLED
   // const [paymentData, setPaymentData] = useState<{
@@ -111,7 +142,7 @@ export default function ApplicationPage() {
       // Personal Details - will be populated from user data
       firstName: userData?.firstName || '',
       lastName: userData?.lastName || '',
-      email: userData?.email || user?.email || '',
+      email: user?.email || userData?.email || '',
       phone: userData?.whatsappNumber || '',
       countryOfBirth: '',
       dateOfBirth: '',
@@ -133,6 +164,24 @@ export default function ApplicationPage() {
     console.log('🎯 Initializing application data:', initialData);
     return initialData;
   });
+
+  // Helper function to format file names for better display
+  const formatFileName = (fileName: string): string => {
+    // Remove draft prefixes from academic documents, identification documents, and passport photos
+    let formattedName = fileName
+      .replace(/^draft_academicDocuments_app_\d+_[^_]+_\d+_/, '')
+      .replace(/^draft_identificationDocument_app_\d+_[^_]+_\d+_/, '')
+      .replace(/^draft_passportPhoto_app_\d+_[^_]+_\d+_/, '');
+    
+    // If the filename is still very long, truncate it
+    if (formattedName.length > 50) {
+      const extension = formattedName.substring(formattedName.lastIndexOf('.'));
+      const nameWithoutExt = formattedName.substring(0, formattedName.lastIndexOf('.'));
+      formattedName = nameWithoutExt.substring(0, 45) + '...' + extension;
+    }
+    
+    return formattedName;
+  };
 
   // Section-specific validation functions (moved after state to avoid hoisting issues)
   const validatePersonalSection = (formData: FormData): { isValid: boolean; errors: string[] } => {
@@ -284,6 +333,92 @@ export default function ApplicationPage() {
     }
   }, [userData]);
 
+  // Ensure draft exists and hydrate local state
+  useEffect(() => {
+    const initialiseDraft = async () => {
+      if (!user?.email || !user?.uid || submittedApplication || applicationMode === 'view') {
+        setIsDraftLoading(false);
+        return;
+      }
+
+      try {
+        setIsDraftLoading(true);
+        console.log('🔄 Initializing Firestore draft...');
+        
+        // Use Firestore service directly
+        const hybridDraft = await studentApplicationService.ensureDraftApplication(user.email, user.uid);
+        setDraftApplication(hybridDraft);
+        setDraftId(hybridDraft.id);
+        
+        // Fetch previously uploaded draft documents
+        setIsLoadingDraftDocuments(true);
+        try {
+          const draftDocs = await studentApplicationService.getDraftDocuments(hybridDraft.id);
+          if (draftDocs) {
+            const docsCount = draftDocs.academicDocuments.length + 
+              (draftDocs.passportPhoto ? 1 : 0) + 
+              (draftDocs.identificationDocument ? 1 : 0);
+            
+            console.log(`📄 Loaded ${docsCount} draft document(s)`);
+            
+            setDraftDocuments({
+              academicDocuments: draftDocs.academicDocuments || [],
+              passportPhoto: draftDocs.passportPhoto,
+              identificationDocument: draftDocs.identificationDocument,
+            });
+            
+            if (docsCount > 0) {
+              showSuccess(
+                'Documents Restored', 
+                `${docsCount} previously uploaded document(s) have been restored.`,
+                4000
+              );
+            }
+          } else {
+            // If no documents found, initialize with empty state
+            setDraftDocuments({
+              academicDocuments: [],
+              passportPhoto: undefined,
+              identificationDocument: undefined,
+            });
+          }
+        } catch (error) {
+          console.error('❌ Failed to load draft documents:', error);
+        } finally {
+          setIsLoadingDraftDocuments(false);
+        }
+
+        if (hybridDraft.formData && Object.keys(hybridDraft.formData).length > 0) {
+          setApplicationData(prev => ({
+            ...prev,
+            ...hybridDraft.formData,
+          }));
+        }
+
+        if (hybridDraft.activeSection) {
+          setActiveSection(hybridDraft.activeSection);
+        }
+
+        if (hybridDraft.lastSavedAt) {
+          setLastAutosaveAt(new Date(hybridDraft.lastSavedAt));
+          setAutosaveStatus('saved');
+        }
+        
+        console.log('✅ Firestore draft initialized successfully');
+      } catch (error) {
+        console.error('❌ Failed to initialise Firestore draft:', error);
+        setDraftError(error instanceof Error ? error.message : 'Unable to initialise draft storage');
+        
+        // Fallback: continue without autosave but don't block the form
+        setAutosaveStatus('error');
+      } finally {
+        setIsDraftLoading(false);
+      }
+    };
+
+    void initialiseDraft();
+  }, [user?.email, user?.uid, submittedApplication, applicationMode]); // Removed showSuccess to prevent infinite loop
+
   // Track page view and form interactions
   useEffect(() => {
     metaPixel.trackPageView('Application Page');
@@ -307,16 +442,121 @@ export default function ApplicationPage() {
         email: user.email || '',
       }));
     }
-  }, [user, applicationData.email]); // applicationData dependency is needed
+  }, [user?.email, applicationData.email]); // Only depend on specific properties to avoid infinite loop
+
+  useEffect(() => {
+    // Don't run autosave if basic conditions aren't met
+    if (!user?.email || !user?.uid || submittedApplication || applicationMode === 'view') {
+      return;
+    }
+
+    // Don't run autosave while submitting
+    if (isSubmitting) {
+      return;
+    }
+
+    // Don't run autosave if draft is still loading 
+    if (isDraftLoading) {
+      console.log('🚫 Skipping autosave - draft is loading');
+      return;
+    }
+    
+    // If draft application isn't initialized yet, create a temp ID
+    const draftId = draftApplication?.id || `temp_${user?.uid}_${Date.now()}`;
+    
+    if (autosaveTimerRef.current) {
+      clearTimeout(autosaveTimerRef.current);
+    }
+
+    autosaveTimerRef.current = setTimeout(async () => {
+      try {
+        console.log('💾 Starting autosave with draft ID:', draftId);
+        setAutosaveStatus('saving');
+        const lastSavedAtIso = new Date().toISOString();
+        
+        // Use our hybrid save method that works with both Firestore and localStorage
+        await studentApplicationService.saveDraft(draftId, {
+          formData: applicationData,
+          activeSection,
+          lastSavedAt: lastSavedAtIso,
+        });
+        
+        // If we don't have a draft application yet, create one
+        if (!draftApplication?.id) {
+          setDraftApplication({
+            id: draftId,
+            email: user?.email || '',
+            uid: user?.uid || '',
+            status: 'draft',
+            formData: applicationData,
+            activeSection,
+            lastSavedAt: lastSavedAtIso,
+            createdAt: lastSavedAtIso,
+            updatedAt: lastSavedAtIso,
+            documents: { academicDocuments: [] },
+          });
+        }
+        
+        setAutosaveStatus('saved');
+        setLastAutosaveAt(new Date(lastSavedAtIso));
+        console.log('✅ Autosaved successfully');
+      } catch (error) {
+        console.error('❌ Autosave failed:', error);
+        
+        // Try localStorage fallback directly if service fails
+        try {
+          if (typeof window !== 'undefined') {
+            const localStorageKey = `application_draft_${draftId}`;
+            const now = new Date().toISOString();
+            
+            const localDraft = {
+              id: draftId,
+              email: user?.email || '',
+              uid: user?.uid || '',
+              formData: applicationData,
+              activeSection,
+              lastSavedAt: now,
+              createdAt: now,
+              updatedAt: now,
+              status: 'draft',
+              documents: { academicDocuments: [] },
+            };
+            
+            localStorage.setItem(localStorageKey, JSON.stringify(localDraft));
+            console.log('✅ Fallback: Saved to localStorage');
+            setAutosaveStatus('saved');
+            setLastAutosaveAt(new Date());
+            return;
+          }
+        } catch (localError) {
+          console.error('❌ Local storage fallback also failed:', localError);
+        }
+        
+        // Only show error if both Firestore and localStorage fail
+        setAutosaveStatus('error');
+        setDraftError('Autosave failed - check your network connection');
+      }
+    }, 1500);
+
+    return () => {
+      if (autosaveTimerRef.current) {
+        clearTimeout(autosaveTimerRef.current);
+      }
+    };
+  }, [applicationData, activeSection, user?.email, user?.uid, isDraftLoading, submittedApplication, applicationMode, isSubmitting]); // Removed draftApplication?.id to prevent infinite loop
 
   // Check for submitted application
   const checkForSubmittedApplication = useCallback(async () => {
-    if (!userData?.email) return;
+    // Use authenticated user's email instead of userData email
+    if (!user?.email) {
+      console.log('🔍 No authenticated user email, skipping application check');
+      return;
+    }
 
     setIsLoadingApplication(true);
     
     try {
-      const applications = await studentApplicationService.getApplicationsByEmail(userData.email);
+      const applications = await studentApplicationService.getApplicationsByEmail(user.email);
       
       if (applications && applications.length > 0) {
         // User has a submitted application
@@ -339,19 +579,29 @@ export default function ApplicationPage() {
       setApplicationMode('form');
       
     } catch (error) {
-      console.error('Error checking for submitted application:', error);
+      console.error('❌ Failed to fetch applications:', error);
+      
+      // Check if it's a permission error
+      if (error && typeof error === 'object' && 'code' in error) {
+        const firebaseError = error as { code: string };
+        if (firebaseError.code === 'permission-denied') {
+          console.warn('⚠️ Permission denied accessing applications collection. Continuing with form mode.');
+        }
+      }
+      
+      // Continue with form mode regardless of error
       setApplicationMode('form');
     } finally {
       setIsLoadingApplication(false);
     }
-  }, [userData?.email]);
+  }, [user?.email]);
 
   // Load existing application on component mount
   useEffect(() => {
     if (user?.uid) {
       checkForSubmittedApplication();
     }
-  }, [user?.uid, checkForSubmittedApplication]);
+  }, [user?.uid]); // Removed checkForSubmittedApplication from dependencies to prevent infinite loop
 
   // Debug effect to log user data
   useEffect(() => {
@@ -598,58 +848,51 @@ export default function ApplicationPage() {
     };
   };
 
-  // Handler for final application submission (OPTIMIZED VERSION)
+  // Handler for final application submission (supports autosave drafts)
   const handleSubmitApplication = async () => {
     if (!user?.uid) return;
-    
-    // Validate form data
+
     const validation = validateFormData(applicationData);
-    
+
     if (!validation.isValid) {
-      // Group errors by section for better UX
-      const personalErrors = validation.errors.filter(error => 
-        error.includes('First name') || error.includes('Last name') || 
-        error.includes('Email') || error.includes('Phone') || 
-        error.includes('Country') || error.includes('Gender') || 
+      const personalErrors = validation.errors.filter(error =>
+        error.includes('First name') || error.includes('Last name') ||
+        error.includes('Email') || error.includes('Phone') ||
+        error.includes('Country') || error.includes('Gender') ||
         error.includes('Physical address')
       );
-      
-      const programErrors = validation.errors.filter(error => 
-        error.includes('Program') || error.includes('Mode of study') || 
+
+      const programErrors = validation.errors.filter(error =>
+        error.includes('Program') || error.includes('Mode of study') ||
         error.includes('Intake')
       );
-      
-      const additionalErrors = validation.errors.filter(error => 
+
+      const additionalErrors = validation.errors.filter(error =>
         error.includes('how you heard') || error.includes('Sponsor')
       );
-      
+
       let errorMessage = 'Please complete the following required fields:\n\n';
-      
+
       if (personalErrors.length > 0) {
         errorMessage += '📝 Personal Details:\n' + personalErrors.map(e => `• ${e}`).join('\n') + '\n\n';
       }
-      
+
       if (programErrors.length > 0) {
         errorMessage += '🎓 Program Selection:\n' + programErrors.map(e => `• ${e}`).join('\n') + '\n\n';
       }
-      
+
       if (additionalErrors.length > 0) {
         errorMessage += 'ℹ️ Additional Information:\n' + additionalErrors.map(e => `• ${e}`).join('\n') + '\n\n';
       }
-      
-      showError(
-        'Validation Error',
-        errorMessage.trim(),
-        8000
-      );
+
+      showError('Validation Error', errorMessage.trim(), 8000);
       return;
     }
-    
+
     try {
       setIsSubmitting(true);
       resetProgress();
-      
-      // 0. Ensure user is authenticated
+
       if (!user) {
         showError(
           'Authentication Required',
@@ -658,29 +901,12 @@ export default function ApplicationPage() {
         );
         return;
       }
-      
+
       console.log('👤 Current user for application submission:', {
         uid: user.uid,
         email: user.email
       });
-      
-      // Prepare file names for progress tracking
-      const fileNames: string[] = [];
-      if (files.passportPhoto) fileNames.push(files.passportPhoto.name);
-      
-      // Safely handle arrays that might be undefined
-      if (Array.isArray(files.academicDocuments)) {
-        files.academicDocuments.forEach(file => fileNames.push(file.name));
-      }
-      if (files.identificationDocument) {
-        fileNames.push(files.identificationDocument.name);
-      }
-      
-      // Start progress tracking
-      startProgress(fileNames);
-      updateStage('preparing', 'Preparing your application...');
-      
-      // Transform form data to StudentApplicationData
+
       const studentData: StudentApplicationData = {
         firstName: applicationData.firstName,
         lastName: applicationData.lastName,
@@ -698,21 +924,71 @@ export default function ApplicationPage() {
         howDidYouHear: applicationData.howDidYouHear,
         additionalNotes: applicationData.additionalNotes,
       };
-      
-      // Step 1: Compress files if they exist (OPTIMIZATION)
+
+      if (draftId) {
+        updateStage('finalizing', 'Finalizing your submission...');
+        const result = await studentApplicationService.promoteDraftToSubmitted(draftId, studentData);
+
+        if (!result.success) {
+          throw new Error(result.message || 'Failed to submit draft application');
+        }
+
+        updateStage('completed', 'Application submitted successfully!');
+
+        metaPixel.trackApplicationSubmission({
+          email: applicationData.email,
+          firstName: applicationData.firstName,
+          lastName: applicationData.lastName,
+          phone: applicationData.phone,
+          program: applicationData.program
+        });
+
+        console.log('🎯 Meta Pixel: Application submission tracked for', applicationData.email);
+
+        showSuccess(
+          'Application Submitted Successfully!',
+          'Your application has been submitted! You can track your progress and upload additional documents anytime.',
+          8000
+        );
+
+        setDraftApplication(null);
+        setDraftId(null);
+        setDraftDocuments({ academicDocuments: [] });
+        setAutosaveStatus('idle');
+        setLastAutosaveAt(null);
+        setFiles({ academicDocuments: [], passportPhoto: undefined, identificationDocument: undefined });
+
+        setTimeout(() => {
+          void checkForSubmittedApplication();
+        }, 1000);
+
+        return;
+      }
+
+      const fileNames: string[] = [];
+      if (files.passportPhoto) fileNames.push(files.passportPhoto.name);
+      if (Array.isArray(files.academicDocuments)) {
+        files.academicDocuments.forEach(file => fileNames.push(file.name));
+      }
+      if (files.identificationDocument) {
+        fileNames.push(files.identificationDocument.name);
+      }
+
+      startProgress(fileNames);
+      updateStage('preparing', 'Preparing your application...');
+
       let processedFiles = files;
       if (files.passportPhoto || files.academicDocuments?.length || files.identificationDocument) {
         updateStage('compressing', 'Optimizing file sizes for faster upload...');
-        
+
         try {
           const compressionResult = await compressApplicationDocuments(files);
           processedFiles = compressionResult;
-          
-          // Show compression results
+
           const totalOriginalSize = compressionResult.compressionResults.reduce((sum, r) => sum + r.originalSize, 0);
           const totalCompressedSize = compressionResult.compressionResults.reduce((sum, r) => sum + r.compressedSize, 0);
           const savingsPercent = Math.round((1 - totalCompressedSize / totalOriginalSize) * 100);
-          
+
           if (savingsPercent > 10) {
             showSuccess(
               'Files Optimized',
@@ -722,27 +998,23 @@ export default function ApplicationPage() {
           }
         } catch (compressionError) {
           console.warn('File compression failed, proceeding with original files:', compressionError);
-          // Continue with original files if compression fails
         }
       }
-      
-      // Step 2: Submit application immediately (OPTIMIZATION - Don't wait for files)
+
       updateStage('uploading', 'Submitting your application...');
-      
+
       const result = await studentApplicationService.submitApplicationWithBackgroundDocuments(
-        studentData, 
+        studentData,
         processedFiles
       );
-      
+
       if (!result.success) {
         throw new Error(result.message || 'Failed to create application');
       }
-      
-      // Step 3: Track document upload progress if files exist
+
       if (result.documentProcessing) {
         updateStage('uploading', 'Uploading documents...');
-        
-        // Simulate progress for user feedback (since we can't track Firebase upload progress directly)
+
         const progressInterval = setInterval(() => {
           fileNames.forEach(fileName => {
             const currentProgress = progress.files[fileName]?.progress || 0;
@@ -751,44 +1023,34 @@ export default function ApplicationPage() {
             }
           });
         }, 1000);
-        
+
         try {
-          // Wait for document processing to complete
           const uploadResults = await result.documentProcessing;
           clearInterval(progressInterval);
-          
-          // Update final progress
+
           uploadResults.forEach((uploadResult, index) => {
             const fileName = fileNames[index];
             if (fileName) {
               updateFileProgress(
-                fileName, 
-                100, 
+                fileName,
+                100,
                 uploadResult.success ? 'completed' : 'error',
                 uploadResult.success ? undefined : uploadResult.message
               );
             }
           });
-          
+
           const successfulUploads = uploadResults.filter(r => r.success);
           console.log(`✅ Background upload completed: ${successfulUploads.length}/${uploadResults.length} successful`);
-          
         } catch (uploadError) {
-          clearInterval(progressInterval);
           console.error('Document upload error:', uploadError);
-          // Don't fail the entire submission for document upload errors
         }
       }
-      
-      // Step 4: Finalize
+
       updateStage('finalizing', 'Finalizing your submission...');
-      
-      // Brief delay for UX
       await new Promise(resolve => setTimeout(resolve, 1000));
-      
       updateStage('completed', 'Application submitted successfully!');
-      
-      // 🎯 TRACK APPLICATION SUBMISSION TO META
+
       metaPixel.trackApplicationSubmission({
         email: applicationData.email,
         firstName: applicationData.firstName,
@@ -798,18 +1060,16 @@ export default function ApplicationPage() {
       });
 
       console.log('🎯 Meta Pixel: Application submission tracked for', applicationData.email);
-      
+
       showSuccess(
         'Application Submitted Successfully!',
         'Your application has been submitted! You can track your progress and upload additional documents anytime.',
         8000
       );
-      
-      // Refresh to show submitted application
+
       setTimeout(async () => {
         await checkForSubmittedApplication();
       }, 2000);
-      
     } catch (error) {
       console.error('Failed to submit application:', error);
       updateStage('error', 'Submission failed');
@@ -1093,54 +1353,208 @@ export default function ApplicationPage() {
       
       return updated;
     });
+    setAutosaveStatus('idle');
+    setDraftError(null);
   };
 
   // Handler for file uploads
-  const handleFileUpload = (field: string, fileList: FileList | null) => {
-    if (fileList) {
-      if (field === 'passportPhoto') {
-        setFiles(prev => ({ ...prev, passportPhoto: fileList[0] }));
-      } else if (field === 'academicDocuments') {
-        const newFiles = Array.from(fileList);
-        
-        // Check academic documents limit (5 max)
-        const currentLocalCount = files.academicDocuments.length;
-        const existingCount = submittedApplication && Array.isArray(submittedApplication.academicDocuments) 
-          ? submittedApplication.academicDocuments.length 
-          : 0;
-        const totalAfterUpload = currentLocalCount + existingCount + newFiles.length;
-        
-        if (totalAfterUpload > 5) {
-          const maxNewFiles = 5 - currentLocalCount - existingCount;
-          showError(
-            'Upload Limit Exceeded',
-            `Maximum 5 academic documents allowed. You can upload ${maxNewFiles} more document(s).`,
-            5000
-          );
-          return;
-        }
-        
-        setFiles(prev => ({ ...prev, academicDocuments: [...prev.academicDocuments, ...newFiles] }));
-      } else if (field === 'identificationDocument') {
-        // Single file for identification document
-        setFiles(prev => ({ ...prev, identificationDocument: fileList[0] }));
+  const handleFileUpload = async (field: string, fileList: FileList | null) => {
+    if (!fileList || !draftId || !applicationData.email) {
+      showWarning(
+        'Draft Not Ready',
+        'Please wait a moment before uploading documents. If the issue persists, refresh the page.',
+        5000
+      );
+      return;
+    }
+
+    const filesArray = Array.from(fileList);
+
+    if (field === 'academicDocuments') {
+      const existingDraftCount = draftDocuments.academicDocuments.length;
+      const existingSubmittedCount = submittedApplication && Array.isArray(submittedApplication.academicDocuments)
+        ? submittedApplication.academicDocuments.length
+        : 0;
+      const totalAfterUpload = existingDraftCount + existingSubmittedCount + filesArray.length;
+
+      if (totalAfterUpload > 5) {
+        const maxNewFiles = Math.max(0, 5 - existingDraftCount - existingSubmittedCount);
+        showError(
+          'Upload Limit Exceeded',
+          maxNewFiles > 0
+            ? `Maximum 5 academic documents allowed. You can upload ${maxNewFiles} more document(s).`
+            : 'Maximum 5 academic documents allowed. Please remove existing documents before uploading new ones.',
+          6000
+        );
+        return;
       }
+    }
+
+    try {
+      showSuccess('Uploading Document', 'Upload starting. Large files might take a moment.', 3000);
+
+      // Set uploading state for the specific document type
+      setUploadingDocuments(prev => ({
+        ...prev,
+        [field]: true
+      }));
+
+      setAutosaveStatus('saving');
+      setDraftError(null);
+
+      const uploadedMetadata: DraftDocumentMetadata[] = [];
+
+      for (const file of filesArray) {
+        const metadata = await studentApplicationService.uploadDraftDocument({
+          applicationId: draftId,
+          file,
+          type: field as DocumentUpload['type'],
+          studentEmail: applicationData.email,
+        });
+        uploadedMetadata.push(metadata);
+      }
+
+      if (field === 'passportPhoto') {
+        setFiles(prev => ({ ...prev, passportPhoto: filesArray[0] }));
+        setDraftDocuments(prev => ({
+          ...prev,
+          passportPhoto: uploadedMetadata[0],
+        }));
+      } else if (field === 'identificationDocument') {
+        setFiles(prev => ({ ...prev, identificationDocument: filesArray[0] }));
+        setDraftDocuments(prev => ({
+          ...prev,
+          identificationDocument: uploadedMetadata[0],
+        }));
+      } else if (field === 'academicDocuments') {
+        setFiles(prev => ({ ...prev, academicDocuments: [...prev.academicDocuments, ...filesArray] }));
+        setDraftDocuments(prev => ({
+          ...prev,
+          academicDocuments: [...prev.academicDocuments, ...uploadedMetadata],
+        }));
+      }
+
+      setAutosaveStatus('saved');
+      setLastAutosaveAt(new Date());
+
+      // Clear uploading state
+      setUploadingDocuments(prev => ({
+        ...prev,
+        [field]: false
+      }));
+    } catch (error) {
+      console.error('❌ Draft document upload failed:', error);
+      showError(
+        'Upload Failed',
+        error instanceof Error ? error.message : 'Failed to upload document. Please try again.',
+        6000
+      );
+
+      // Clear uploading state on error
+      setUploadingDocuments(prev => ({
+        ...prev,
+        [field]: false
+      }));
     }
   };
 
   // Helper function to remove a file from a document array
-  const removeFile = (field: string, index?: number) => {
-    if (field === 'academicDocuments') {
-      setFiles(prev => ({
-        ...prev,
-        academicDocuments: prev.academicDocuments.filter((_, i) => i !== index)
-      }));
-    } else if (field === 'identificationDocument') {
-      // Remove single identification document
-      setFiles(prev => ({
-        ...prev,
-        identificationDocument: undefined
-      }));
+  const removeFile = async (field: string, index?: number) => {
+    if (!draftId) {
+      showWarning(
+        'Draft Not Ready',
+        'Please wait for the draft to initialize before removing documents.',
+        5000
+      );
+      return;
+    }
+
+    try {
+      // Set loading state for the specific document being deleted
+      if (field === 'academicDocuments' && typeof index === 'number') {
+        setDeletingDocuments(prev => ({
+          ...prev,
+          academicDocuments: new Set(prev.academicDocuments).add(index)
+        }));
+      } else if (field === 'identificationDocument') {
+        setDeletingDocuments(prev => ({
+          ...prev,
+          identificationDocument: true
+        }));
+      } else if (field === 'passportPhoto') {
+        setDeletingDocuments(prev => ({
+          ...prev,
+          passportPhoto: true
+        }));
+      }
+
+      setAutosaveStatus('saving');
+      setDraftError(null);
+
+      if (field === 'academicDocuments') {
+        const docMeta = typeof index === 'number' ? draftDocuments.academicDocuments[index] : undefined;
+        await studentApplicationService.deleteDraftDocument(draftId, 'academicDocuments', docMeta?.downloadUrl);
+        setFiles(prev => ({
+          ...prev,
+          academicDocuments: prev.academicDocuments.filter((_, i) => i !== index)
+        }));
+        setDraftDocuments(prev => ({
+          ...prev,
+          academicDocuments: prev.academicDocuments.filter((_, i) => i !== index)
+        }));
+      } else if (field === 'identificationDocument') {
+        await studentApplicationService.deleteDraftDocument(draftId, 'identificationDocument');
+        setFiles(prev => ({
+          ...prev,
+          identificationDocument: undefined
+        }));
+        setDraftDocuments(prev => ({
+          ...prev,
+          identificationDocument: undefined
+        }));
+      } else if (field === 'passportPhoto') {
+        await studentApplicationService.deleteDraftDocument(draftId, 'passportPhoto');
+        setFiles(prev => ({
+          ...prev,
+          passportPhoto: undefined
+        }));
+        setDraftDocuments(prev => ({
+          ...prev,
+          passportPhoto: undefined
+        }));
+      }
+
+      setAutosaveStatus('saved');
+      setLastAutosaveAt(new Date());
+    } catch (error) {
+      console.error('❌ Failed to remove draft document:', error);
+      showError(
+        'Remove Failed',
+        error instanceof Error ? error.message : 'Could not remove document. Please try again.',
+        6000
+      );
+    } finally {
+      // Clear loading state regardless of success or failure
+      if (field === 'academicDocuments' && typeof index === 'number') {
+        setDeletingDocuments(prev => {
+          const newSet = new Set(prev.academicDocuments);
+          newSet.delete(index);
+          return {
+            ...prev,
+            academicDocuments: newSet
+          };
+        });
+      } else if (field === 'identificationDocument') {
+        setDeletingDocuments(prev => ({
+          ...prev,
+          identificationDocument: false
+        }));
+      } else if (field === 'passportPhoto') {
+        setDeletingDocuments(prev => ({
+          ...prev,
+          passportPhoto: false
+        }));
+      }
     }
   };
 
@@ -1160,6 +1574,74 @@ export default function ApplicationPage() {
     if (!isCountryDropdownOpen) {
       setCountrySearchQuery('');
     }
+  };
+
+  const getLastAutosaveDate = (): Date | null => {
+    if (lastAutosaveAt) {
+      return lastAutosaveAt;
+    }
+
+    if (draftApplication?.lastSavedAt) {
+      const parsed = new Date(draftApplication.lastSavedAt);
+      if (!Number.isNaN(parsed.getTime())) {
+        return parsed;
+      }
+    }
+
+    return null;
+  };
+
+  const renderAutosaveIndicator = () => {
+    if (applicationMode === 'view') {
+      return null;
+    }
+
+    const status = isDraftLoading ? 'loading' : autosaveStatus;
+    const lastSavedDate = getLastAutosaveDate();
+
+    let containerClasses = 'bg-slate-50 border border-slate-200 text-slate-600';
+    let iconClass = 'ri-save-3-line text-slate-500';
+    let title = 'Draft ready';
+    let description = 'Your progress saves automatically as you type.';
+
+    if (status === 'loading') {
+      containerClasses = 'bg-blue-50 border border-blue-200 text-blue-800';
+      iconClass = 'ri-refresh-line text-blue-600 animate-spin';
+      title = 'Preparing your draft';
+      description = 'Fetching your latest saved progress...';
+    } else if (status === 'saving') {
+      containerClasses = 'bg-amber-50 border border-amber-200 text-amber-800';
+      iconClass = 'ri-cloud-line text-amber-600 animate-spin';
+      title = 'Saving changes';
+      description = 'We’re updating your draft in real time.';
+    } else if (status === 'saved') {
+      containerClasses = 'bg-green-50 border border-green-200 text-green-800';
+      iconClass = 'ri-check-line text-green-600';
+      title = 'All changes saved';
+      description = lastSavedDate
+        ? `Saved at ${lastSavedDate.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}`
+        : 'Draft saved successfully.';
+    } else if (status === 'error') {
+      containerClasses = 'bg-red-50 border border-red-200 text-red-800';
+      iconClass = 'ri-alert-line text-red-600';
+      title = 'Autosave issue';
+      description = draftError || 'We couldn’t save your changes. Please check your connection and retry.';
+    }
+
+    return (
+      <div className={`mb-4 p-3 rounded-lg flex items-start gap-3 text-sm ${containerClasses}`}>
+        <i className={`${iconClass} text-base mt-0.5`}></i>
+        <div className="flex-1 space-y-1">
+          <p className="font-medium">{title}</p>
+          <p className="text-xs sm:text-sm">{description}</p>
+          {status !== 'saved' && status !== 'loading' && lastSavedDate && (
+            <p className="text-xs opacity-80">
+              Last successful save at {lastSavedDate.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
+            </p>
+          )}
+        </div>
+      </div>
+    );
   };
 
   // Close dropdown when clicking outside
@@ -2294,6 +2776,8 @@ export default function ApplicationPage() {
                 </span>
               </div>
 
+              {renderAutosaveIndicator()}
+
               {/* Section Requirements Indicator */}
               {!isSectionCompleted('personal') && (
                 <div className="mb-4 p-3 bg-blue-50 border border-blue-200 rounded-lg">
@@ -2577,25 +3061,100 @@ export default function ApplicationPage() {
                     Passport Photo <span className="text-red-600">*</span>
                   </label>
 
-                  <div className="border-2 border-dashed rounded-lg p-4 text-center border-slate-200">
-                    <div className="flex flex-col items-center">
-                      <i className="ri-image-line text-2xl text-slate-400 mb-2"></i>
-                      {files.passportPhoto ? (
+                  <div className={`border-2 border-dashed rounded-lg p-4 text-center border-slate-200 relative ${uploadingDocuments.passportPhoto ? 'opacity-75' : ''}`}>
+                    {isLoadingDraftDocuments ? (
+                      <div className="flex flex-col items-center py-2">
+                        <i className="ri-loader-4-line text-2xl text-blue-600 animate-spin mb-2"></i>
+                        <span className="text-xs text-blue-600">Loading saved photo...</span>
+                      </div>
+                    ) : uploadingDocuments.passportPhoto ? (
+                      <div className="flex flex-col items-center py-2">
+                        <i className="ri-upload-2-line text-2xl text-green-600 animate-pulse mb-2"></i>
+                        <span className="text-xs text-green-600">Uploading photo...</span>
+                      </div>
+                    ) : (
+                      <div className="flex flex-col items-center">
+                        <i className="ri-image-line text-2xl text-slate-400 mb-2"></i>
+                      {draftDocuments.passportPhoto ? (
                         <div className="space-y-2">
                           <div className="flex items-center justify-center text-green-700">
                             <i className="ri-check-circle-fill mr-2"></i>
-                            <p className="text-sm font-medium">{files.passportPhoto.name}</p>
+                            <p className="text-sm font-medium" title={draftDocuments.passportPhoto.fileName}>
+                              {formatFileName(draftDocuments.passportPhoto.fileName)}
+                            </p>
+                          </div>
+                          <p className="text-xs text-slate-600">
+                            {(draftDocuments.passportPhoto.size / 1024 / 1024).toFixed(2)} MB · Saved {new Date(draftDocuments.passportPhoto.uploadedAt).toLocaleString()}
+                          </p>
+                          <div className="flex items-center justify-center gap-2 mt-1">
+                            <a
+                              href={draftDocuments.passportPhoto.downloadUrl}
+                              target="_blank"
+                              rel="noopener noreferrer"
+                              className="text-xs text-blue-600 hover:text-blue-800 hover:bg-blue-50 px-3 py-1.5 rounded transition-colors flex items-center"
+                            >
+                              <i className="ri-eye-line mr-1.5"></i>
+                              View Photo
+                            </a>
+                            {isEditing && (
+                              <button
+                                onClick={() => void removeFile('passportPhoto')}
+                                disabled={deletingDocuments.passportPhoto}
+                                className={`text-xs px-3 py-1.5 rounded transition-colors flex items-center ${
+                                  deletingDocuments.passportPhoto
+                                    ? 'text-gray-400 bg-gray-100 cursor-not-allowed'
+                                    : 'text-red-600 hover:text-red-800 hover:bg-red-50'
+                                }`}
+                                title={deletingDocuments.passportPhoto ? "Removing photo..." : "Remove photo"}
+                              >
+                                {deletingDocuments.passportPhoto ? (
+                                  <>
+                                    <i className="ri-loader-4-line mr-1.5 animate-spin"></i>
+                                    Removing...
+                                  </>
+                                ) : (
+                                  <>
+                                    <i className="ri-delete-bin-line mr-1.5"></i>
+                                    Remove Photo
+                                  </>
+                                )}
+                              </button>
+                            )}
+                          </div>
+                        </div>
+                      ) : files.passportPhoto ? (
+                        <div className="space-y-2">
+                          <div className="flex items-center justify-center text-green-700">
+                            <i className="ri-check-circle-fill mr-2"></i>
+                            <p className="text-sm font-medium" title={files.passportPhoto.name}>
+                              {formatFileName(files.passportPhoto.name)}
+                            </p>
                           </div>
                           <p className="text-xs text-slate-600">
                             {(files.passportPhoto.size / 1024 / 1024).toFixed(2)} MB
                           </p>
                           {isEditing && (
                             <button
-                              onClick={() => setFiles(prev => ({ ...prev, passportPhoto: undefined }))}
-                              className="text-xs text-red-600 hover:text-red-800 hover:bg-red-50 px-2 py-1 rounded transition-colors"
+                              onClick={() => void removeFile('passportPhoto')}
+                              disabled={deletingDocuments.passportPhoto}
+                              className={`text-xs px-2 py-1 rounded transition-colors flex items-center ${
+                                deletingDocuments.passportPhoto
+                                  ? 'text-gray-400 bg-gray-100 cursor-not-allowed'
+                                  : 'text-red-600 hover:text-red-800 hover:bg-red-50'
+                              }`}
+                              title={deletingDocuments.passportPhoto ? "Removing photo..." : "Remove photo"}
                             >
-                              <i className="ri-delete-bin-line mr-1"></i>
-                              Remove Photo
+                              {deletingDocuments.passportPhoto ? (
+                                <>
+                                  <i className="ri-loader-4-line mr-1 animate-spin"></i>
+                                  Removing...
+                                </>
+                              ) : (
+                                <>
+                                  <i className="ri-delete-bin-line mr-1"></i>
+                                  Remove Photo
+                                </>
+                              )}
                             </button>
                           )}
                         </div>
@@ -2648,7 +3207,7 @@ export default function ApplicationPage() {
                             className="cursor-pointer bg-red-800 text-white px-4 py-2 rounded-lg hover:bg-red-700 transition-colors text-sm inline-flex items-center"
                           >
                             <i className="ri-upload-line mr-2"></i>
-                            {files.passportPhoto 
+                            {draftDocuments.passportPhoto || files.passportPhoto 
                               ? 'Replace Photo' 
                               : submittedApplication 
                               ? 'Update Photo' 
@@ -2657,7 +3216,8 @@ export default function ApplicationPage() {
                           </label>
                         </div>
                       )}
-                    </div>
+                      </div>
+                    )}
                   </div>
                   <p className="text-xs text-slate-500 mt-1">Upload a clear passport-style photo (JPG, PNG, max 5MB)</p>
                 </div>
@@ -2741,6 +3301,8 @@ export default function ApplicationPage() {
                   {isSectionCompleted('program') ? 'Completed' : 'In Progress'}
                 </span>
               </div>
+
+              {renderAutosaveIndicator()}
 
               {/* Section Requirements Indicator */}
               {!isSectionCompleted('program') && (
@@ -2881,13 +3443,25 @@ export default function ApplicationPage() {
                     <span className="text-xs text-slate-500 ml-2">(Max 5 documents allowed)</span>
                   </label>
 
-                  <div className="border-2 rounded-lg p-4 border-slate-200 bg-white">
+                  <div className={`border-2 rounded-lg p-4 border-slate-200 bg-white relative ${uploadingDocuments.academicDocuments ? 'opacity-75' : ''}`}>
                     <div className="flex items-center justify-between mb-3">
                       <div className="flex items-center">
                         <i className="ri-file-text-line text-lg text-slate-600 mr-2"></i>
                         <span className="text-sm font-medium text-slate-700">
-                          {submittedApplication ? 'New Documents to Upload:' : 'Uploaded Documents:'}
+                          {submittedApplication ? 'New Documents to Upload:' : 'Autosaved Documents:'}
                         </span>
+                        {isLoadingDraftDocuments && (
+                          <span className="ml-3 inline-flex items-center text-xs text-blue-600">
+                            <i className="ri-loader-4-line mr-1 animate-spin"></i>
+                            Loading...
+                          </span>
+                        )}
+                        {uploadingDocuments.academicDocuments && (
+                          <span className="ml-3 inline-flex items-center text-xs text-green-600">
+                            <i className="ri-upload-2-line mr-1 animate-pulse"></i>
+                            Uploading...
+                          </span>
+                        )}
                       </div>
                       {submittedApplication && (
                         <span className="px-2 py-1 bg-blue-100 text-blue-700 text-xs rounded">
@@ -2898,6 +3472,77 @@ export default function ApplicationPage() {
                       )}
                     </div>
                     
+                    {/* Draft autosaved documents */}
+                    {draftDocuments.academicDocuments.length > 0 && (
+                      <div className="mb-4 p-3 bg-green-50 border border-green-200 rounded-lg">
+                        <div className="flex items-center justify-between mb-2">
+                          <div className="text-sm font-medium text-green-800">
+                            <i className="ri-folder-user-line mr-2"></i>
+                            Autosaved Documents ({draftDocuments.academicDocuments.length})
+                          </div>
+                          <span className="text-xs text-green-700">
+                            Saved automatically as you uploaded
+                          </span>
+                        </div>
+                        <div className="space-y-2">
+                          {draftDocuments.academicDocuments.map((doc, index) => (
+                            <div key={doc.downloadUrl} className="flex items-center justify-between p-2 bg-white border border-green-200 rounded">
+                              <div className="flex items-center overflow-hidden max-w-[70%]">
+                                <i className="ri-file-text-line text-green-600 mr-2 flex-shrink-0"></i>
+                                <div className="overflow-hidden">
+                                  <div 
+                                    className="text-sm text-slate-700 font-medium whitespace-nowrap overflow-hidden text-ellipsis" 
+                                    title={doc.fileName}
+                                  >
+                                    {formatFileName(doc.fileName)}
+                                  </div>
+                                  <div className="text-xs text-slate-500 whitespace-nowrap">
+                                    {(doc.size / 1024 / 1024).toFixed(2)} MB · {new Date(doc.uploadedAt).toLocaleDateString()}
+                                  </div>
+                                </div>
+                              </div>
+                              <div className="flex items-center gap-2 flex-shrink-0 ml-2">
+                                <a
+                                  href={doc.downloadUrl}
+                                  target="_blank"
+                                  rel="noopener noreferrer"
+                                  className="text-green-700 hover:text-green-900 text-xs px-2 py-1 hover:bg-green-100 rounded transition-colors flex items-center"
+                                  title="View document"
+                                >
+                                  <i className="ri-eye-line mr-1"></i>
+                                  View
+                                </a>
+                                {isEditing && (
+                                  <button
+                                    onClick={() => void removeFile('academicDocuments', index)}
+                                    disabled={deletingDocuments.academicDocuments.has(index)}
+                                    className={`text-xs px-2 py-1 rounded transition-colors flex items-center ${
+                                      deletingDocuments.academicDocuments.has(index)
+                                        ? 'text-gray-400 bg-gray-100 cursor-not-allowed'
+                                        : 'text-red-600 hover:text-red-800 hover:bg-red-50'
+                                    }`}
+                                    title={deletingDocuments.academicDocuments.has(index) ? "Removing document..." : "Remove document"}
+                                  >
+                                    {deletingDocuments.academicDocuments.has(index) ? (
+                                      <>
+                                        <i className="ri-loader-4-line mr-1 animate-spin"></i>
+                                        Removing...
+                                      </>
+                                    ) : (
+                                      <>
+                                        <i className="ri-delete-bin-line mr-1"></i>
+                                        Remove
+                                      </>
+                                    )}
+                                  </button>
+                                )}
+                              </div>
+                            </div>
+                          ))}
+                        </div>
+                      </div>
+                    )}
+
                     {/* Existing uploaded documents */}
                     {submittedApplication && Array.isArray(submittedApplication.academicDocuments) && submittedApplication.academicDocuments.length > 0 && (
                       <div className="mb-4 p-3 bg-blue-50 border border-blue-200 rounded-lg">
@@ -2919,7 +3564,7 @@ export default function ApplicationPage() {
                                   href={docUrl}
                                   target="_blank"
                                   rel="noopener noreferrer"
-                                  className="text-blue-600 hover:text-blue-800 text-xs px-2 py-1 hover:bg-blue-50 rounded transition-colors"
+                                  className="text-blue-600 hover:text-blue-800 text-xs px-3 py-1.5 hover:bg-blue-50 rounded transition-colors flex items-center"
                                   title="View document"
                                 >
                                   <i className="ri-eye-line mr-1"></i>
@@ -2946,17 +3591,17 @@ export default function ApplicationPage() {
                                       }
                                     }}
                                     disabled={deletingDocUrl === docUrl || isSubmitting}
-                                    className={`text-red-600 text-xs px-2 py-1 rounded transition-colors ${deletingDocUrl === docUrl ? 'opacity-60 cursor-not-allowed' : 'hover:text-red-800 hover:bg-red-50'}`}
+                                    className={`text-red-600 text-xs px-3 py-1.5 rounded transition-colors flex items-center ${deletingDocUrl === docUrl ? 'opacity-60 cursor-not-allowed' : 'hover:text-red-800 hover:bg-red-50'}`}
                                     title="Remove document"
                                   >
                                     {deletingDocUrl === docUrl ? (
                                       <span className="inline-flex items-center">
-                                        <i className="ri-loader-4-line mr-1 animate-spin"></i>
+                                        <i className="ri-loader-4-line mr-1.5 animate-spin"></i>
                                         Removing...
                                       </span>
                                     ) : (
                                       <span className="inline-flex items-center">
-                                        <i className="ri-delete-bin-line mr-1"></i>
+                                        <i className="ri-delete-bin-line mr-1.5"></i>
                                         Remove
                                       </span>
                                     )}
@@ -2969,11 +3614,11 @@ export default function ApplicationPage() {
                       </div>
                     )}
                     
-                    {/* Current selected files */}
+                    {/* Local session files (should mirror autosaved state) */}
                     {files.academicDocuments && files.academicDocuments.length > 0 ? (
                       <div className="space-y-2 mb-3">
                         <div className="text-sm text-slate-600 font-medium mb-2">
-                          Selected files ({files.academicDocuments.length}):
+                          Recent session files ({files.academicDocuments.length}):
                         </div>
                         {files.academicDocuments.map((doc, index) => (
                           <div key={index} className="flex items-center justify-between p-3 bg-slate-50 rounded-lg border">
@@ -3026,8 +3671,9 @@ export default function ApplicationPage() {
                               const existingCount = submittedApplication && Array.isArray(submittedApplication.academicDocuments) 
                                 ? submittedApplication.academicDocuments.length 
                                 : 0;
+                              const draftCount = draftDocuments.academicDocuments.length;
                               const currentCount = files.academicDocuments.length;
-                              const totalCount = existingCount + currentCount;
+                              const totalCount = existingCount + draftCount + currentCount;
                               const remaining = Math.max(0, 5 - totalCount);
                               
                               if (totalCount >= 5) {
@@ -3065,13 +3711,19 @@ export default function ApplicationPage() {
                     Identification Document <span className="text-red-600">*</span>
                     <span className="text-xs text-slate-500 ml-2">(Single document only)</span>
                   </label>
-                  <div className={`border-2 border-slate-200 rounded-lg p-4 ${isEditing ? 'bg-white' : 'bg-[#f7f7f7]'}`}>
+                  <div className={`border-2 border-slate-200 rounded-lg p-4 relative ${isEditing ? 'bg-white' : 'bg-[#f7f7f7]'} ${uploadingDocuments.identificationDocument ? 'opacity-75' : ''}`}>
                     <div className="flex items-center justify-between mb-3">
                       <div className="flex items-center">
                         <i className="ri-id-card-line text-lg text-slate-600 mr-2"></i>
                         <span className="text-sm font-medium text-slate-700">
-                          {submittedApplication ? 'New Document to Upload:' : 'Uploaded Document:'}
+                          {submittedApplication ? 'New Document to Upload:' : 'Autosaved Document:'}
                         </span>
+                        {uploadingDocuments.identificationDocument && (
+                          <span className="ml-3 inline-flex items-center text-xs text-green-600">
+                            <i className="ri-upload-2-line mr-1 animate-pulse"></i>
+                            Uploading...
+                          </span>
+                        )}
                       </div>
                       {submittedApplication && (
                         <span className="px-2 py-1 bg-blue-100 text-blue-700 text-xs rounded">
@@ -3080,30 +3732,118 @@ export default function ApplicationPage() {
                       )}
                     </div>
                     
-                    {/* Current selected file */}
-                    {files.identificationDocument ? (
+                    {isLoadingDraftDocuments ? (
+                      <div className="space-y-2 mb-3">
+                        <div className="flex items-center justify-between p-3 bg-slate-50 rounded-lg border">
+                          <div className="w-full flex flex-col gap-2">
+                            <div className="animate-pulse bg-slate-200 h-4 w-3/4 rounded"></div>
+                            <div className="animate-pulse bg-slate-200 h-3 w-1/2 rounded"></div>
+                          </div>
+                        </div>
+                      </div>
+                    ) : draftDocuments.identificationDocument ? (
+                      <div className="space-y-2 mb-3">
+                        <div className="text-sm text-slate-600 font-medium mb-2">
+                          Autosaved document:
+                        </div>
+                        <div className="flex items-center justify-between p-3 bg-green-50 rounded-lg border border-green-200">
+                          <div className="flex items-center overflow-hidden max-w-[70%]">
+                            <i className="ri-file-line text-green-600 mr-2 flex-shrink-0"></i>
+                            <div className="overflow-hidden">
+                              <div 
+                                className="text-sm text-slate-700 font-medium whitespace-nowrap overflow-hidden text-ellipsis" 
+                                title={draftDocuments.identificationDocument.fileName}
+                              >
+                                {formatFileName(draftDocuments.identificationDocument.fileName)}
+                              </div>
+                              <div className="text-xs text-slate-500 whitespace-nowrap">
+                                {(draftDocuments.identificationDocument.size / 1024 / 1024).toFixed(2)} MB · Uploaded {new Date(draftDocuments.identificationDocument.uploadedAt).toLocaleDateString()}
+                              </div>
+                            </div>
+                          </div>
+                          <div className="flex items-center gap-2 flex-shrink-0 ml-2">
+                            <a
+                              href={draftDocuments.identificationDocument.downloadUrl}
+                              target="_blank"
+                              rel="noopener noreferrer"
+                              className="text-green-700 hover:text-green-900 text-xs px-2 py-1 hover:bg-green-100 rounded transition-colors flex items-center"
+                              title="View document"
+                            >
+                              <i className="ri-eye-line mr-1"></i>
+                              View
+                            </a>
+                            {isEditing && (
+                              <button
+                                onClick={() => void removeFile('identificationDocument')}
+                                disabled={deletingDocuments.identificationDocument}
+                                className={`text-xs px-2 py-1 rounded transition-colors flex items-center ${
+                                  deletingDocuments.identificationDocument
+                                    ? 'text-gray-400 bg-gray-100 cursor-not-allowed'
+                                    : 'text-red-600 hover:text-red-800 hover:bg-red-50'
+                                }`}
+                                title={deletingDocuments.identificationDocument ? "Removing document..." : "Remove document"}
+                              >
+                                {deletingDocuments.identificationDocument ? (
+                                  <>
+                                    <i className="ri-loader-4-line mr-1 animate-spin"></i>
+                                    Removing...
+                                  </>
+                                ) : (
+                                  <>
+                                    <i className="ri-delete-bin-line mr-1"></i>
+                                    Remove
+                                  </>
+                                )}
+                              </button>
+                            )}
+                          </div>
+                        </div>
+                      </div>
+                    ) : files.identificationDocument ? (
                       <div className="space-y-2 mb-3">
                         <div className="text-sm text-slate-600 font-medium mb-2">
                           Selected document:
                         </div>
                         <div className="flex items-center justify-between p-3 bg-slate-50 rounded-lg border">
-                          <div className="flex items-center">
-                            <i className="ri-file-line text-green-600 mr-2"></i>
-                            <div>
-                              <span className="text-sm text-slate-700 font-medium">{files.identificationDocument.name}</span>
-                              <div className="text-xs text-slate-500">
+                          <div className="flex items-center overflow-hidden max-w-[70%]">
+                            <i className="ri-file-line text-green-600 mr-2 flex-shrink-0"></i>
+                            <div className="overflow-hidden">
+                              <div 
+                                className="text-sm text-slate-700 font-medium whitespace-nowrap overflow-hidden text-ellipsis" 
+                                title={files.identificationDocument.name}
+                              >
+                                {formatFileName(files.identificationDocument.name)}
+                              </div>
+                              <div className="text-xs text-slate-500 whitespace-nowrap">
                                 {(files.identificationDocument.size / 1024 / 1024).toFixed(2)} MB
                               </div>
                             </div>
                           </div>
                           {isEditing && (
-                            <button
-                              onClick={() => removeFile('identificationDocument')}
-                              className="text-red-600 hover:text-red-800 hover:bg-red-50 p-1 rounded transition-colors"
-                              title="Remove file"
-                            >
-                              <i className="ri-delete-bin-line"></i>
-                            </button>
+                            <div className="flex-shrink-0 ml-2">
+                              <button
+                                onClick={() => void removeFile('identificationDocument')}
+                                disabled={deletingDocuments.identificationDocument}
+                                className={`text-xs px-2 py-1 rounded transition-colors flex items-center ${
+                                  deletingDocuments.identificationDocument
+                                    ? 'text-gray-400 bg-gray-100 cursor-not-allowed'
+                                    : 'text-red-600 hover:text-red-800 hover:bg-red-50'
+                                }`}
+                                title={deletingDocuments.identificationDocument ? "Removing file..." : "Remove file"}
+                              >
+                                {deletingDocuments.identificationDocument ? (
+                                  <>
+                                    <i className="ri-loader-4-line mr-1 animate-spin"></i>
+                                    Removing...
+                                  </>
+                                ) : (
+                                  <>
+                                    <i className="ri-delete-bin-line mr-1"></i>
+                                    Remove
+                                  </>
+                                )}
+                              </button>
+                            </div>
                           )}
                         </div>
                       </div>
@@ -3130,18 +3870,9 @@ export default function ApplicationPage() {
                             className="cursor-pointer bg-red-800 text-white px-4 py-2 rounded-lg hover:bg-red-700 transition-colors text-sm inline-flex items-center"
                           >
                             <i className="ri-upload-line mr-2"></i>
-                            {files.identificationDocument ? 'Replace Document' : 'Upload Document'}
+                            {draftDocuments.identificationDocument || files.identificationDocument ? 'Replace Document' : 'Upload Document'}
                           </label>
                         </div>
-                        {files.identificationDocument && (
-                          <button
-                            onClick={() => setFiles(prev => ({ ...prev, identificationDocument: undefined }))}
-                            className="bg-slate-500 text-white px-4 py-2 rounded-lg hover:bg-slate-600 transition-colors text-sm inline-flex items-center"
-                          >
-                            <i className="ri-delete-bin-line mr-2"></i>
-                            Remove Document
-                          </button>
-                        )}
                       </div>
                     )}
                     <p className="text-xs text-slate-500 mt-2">
@@ -3247,6 +3978,8 @@ export default function ApplicationPage() {
                 </div>
                 <h2 className="text-xl font-bold text-gray-800">Additional Information</h2>
               </div>
+
+              {renderAutosaveIndicator()}
 
               
               {/* Sponsorship Information */}
