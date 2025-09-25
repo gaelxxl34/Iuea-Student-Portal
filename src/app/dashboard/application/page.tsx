@@ -389,9 +389,49 @@ export default function ApplicationPage() {
         }
 
         if (hybridDraft.formData && Object.keys(hybridDraft.formData).length > 0) {
+          console.log('🔄 Merging draft formData:', hybridDraft.formData);
+          console.log('🔄 Current userData:', userData);
+          
+          setApplicationData(prev => {
+            console.log('🔄 Previous applicationData:', prev);
+            
+            const mergedData = {
+              ...prev,
+              ...hybridDraft.formData,
+            };
+            
+            // Preserve prefilled userData if draft has empty values
+            if (userData) {
+              if (!mergedData.firstName && userData.firstName) {
+                mergedData.firstName = userData.firstName;
+                console.log('✅ Preserved firstName from userData:', userData.firstName);
+              }
+              if (!mergedData.lastName && userData.lastName) {
+                mergedData.lastName = userData.lastName;
+                console.log('✅ Preserved lastName from userData:', userData.lastName);
+              }
+              if (!mergedData.email && userData.email) {
+                mergedData.email = userData.email;
+                console.log('✅ Preserved email from userData:', userData.email);
+              }
+              if (!mergedData.phone && userData.whatsappNumber) {
+                mergedData.phone = userData.whatsappNumber;
+                console.log('✅ Preserved phone from userData:', userData.whatsappNumber);
+              }
+            }
+            
+            console.log('🔄 Final merged applicationData:', mergedData);
+            return mergedData;
+          });
+        } else if (userData) {
+          // If no draft formData but we have userData, ensure it's preserved
+          console.log('🔄 No draft formData, preserving userData:', userData);
           setApplicationData(prev => ({
             ...prev,
-            ...hybridDraft.formData,
+            firstName: userData.firstName || prev.firstName,
+            lastName: userData.lastName || prev.lastName,
+            email: userData.email || prev.email,
+            phone: userData.whatsappNumber || prev.phone,
           }));
         }
 
