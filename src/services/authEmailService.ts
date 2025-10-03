@@ -19,6 +19,7 @@ interface AuthEmailOptions {
   email: string;
   userName?: string;
   redirectUrl?: string;
+  phoneNumber?: string;
 }
 
 interface EmailResponse {
@@ -54,26 +55,42 @@ class AuthEmailService {
   /**
    * Send custom branded email verification
    * This replaces Firebase's default email verification
+   * Also sends WhatsApp notification if phone number is provided
    */
   async sendCustomEmailVerification({ 
     email, 
     userName = "Student",
-    redirectUrl = `${window.location.origin}/verify-email`
+    redirectUrl = `${window.location.origin}/verify-email`,
+    phoneNumber
   }: AuthEmailOptions): Promise<EmailResponse> {
     try {
       console.log('📧 Sending custom email verification to:', email);
       
       const headers = await this.getAuthHeaders();
 
+      const requestBody: {
+        email: string;
+        userName: string;
+        redirectUrl: string;
+        portalType: string;
+        phoneNumber?: string;
+      } = {
+        email,
+        userName,
+        redirectUrl,
+        portalType: 'student'
+      };
+
+      // Add phone number if provided for WhatsApp notification
+      if (phoneNumber) {
+        requestBody.phoneNumber = phoneNumber;
+        console.log('📱 Phone number provided, WhatsApp notification will be sent');
+      }
+
       const response = await fetch(`${API_BASE_URL}/api/auth/send-email-verification`, {
         method: "POST",
         headers,
-        body: JSON.stringify({
-          email,
-          userName,
-          redirectUrl,
-          portalType: 'student'
-        }),
+        body: JSON.stringify(requestBody),
       });
 
       let responseData;
@@ -91,6 +108,10 @@ class AuthEmailService {
       }
 
       console.log('✅ Custom email verification sent successfully:', responseData);
+      
+      if (responseData.whatsappSent) {
+        console.log('📱 WhatsApp notification sent successfully');
+      }
 
       return {
         success: true,
@@ -163,7 +184,9 @@ class AuthEmailService {
   }
 
   /**
-   * Send welcome email after successful signup
+   * Send welcome email on first login
+   * NOTE: This should NOT be called during signup - only on first login
+   * to avoid sending duplicate welcome emails
    */
   async sendWelcomeEmail({ 
     email, 

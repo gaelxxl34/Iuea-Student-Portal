@@ -1077,8 +1077,144 @@ class StudentApplicationService {
   }
 
   /**
-   * Find existing lead by email or phone number
+   * Find existing lead by email or phone number (for signup flow)
+   * This PUBLIC method is specifically designed for the signup flow where we need to:
+   * 1. Find leads created by agents/chatbots (not filtered by UID)
+   * 2. Update existing leads from CONTACTED -> INTERESTED when user signs up
+   * 3. Avoid creating duplicate leads
+   * 
+   * Unlike the private findExistingLead method, this does NOT filter by UID
+   * because we want to find leads regardless of who created them.
+   */
+  async findExistingLeadForSignup(email: string, phone: string): Promise<{
+    id: string;
+    status: string;
+    source: string;
+    createdAt: string;
+    assignedTo?: string;
+    priority?: string;
+    totalInteractions?: number;
+    lastInteractionAt?: string;
+    timeline?: Array<{
+      date: string;
+      action: string;
+      status: string;
+      notes: string;
+    }>;
+    notes?: string;
+    tags?: string[];
+  } | null> {
+    try {
+      console.log(`🔍 [SIGNUP] Searching for existing lead with email: ${email} or phone: ${phone}`);
+      
+      // For signup flow, we do a more permissive check to find any existing lead
+      // regardless of who created it (agent, chatbot, etc.)
+      const leadsRef = collection(db, 'leads');
+      
+      // First, try to find by email (primary identifier) - NO UID FILTER
+      const emailQuery = query(
+        leadsRef,
+        where('email', '==', email.toLowerCase())
+      );
+      
+      let emailSnapshot;
+      try {
+        emailSnapshot = await getDocs(emailQuery);
+      } catch (error: unknown) {
+        // Handle permission errors gracefully
+        if (error && typeof error === 'object' && 'code' in error) {
+          const firebaseError = error as { code: string };
+          if (firebaseError.code === 'permission-denied') {
+            console.warn('⚠️ [SIGNUP] Permission denied accessing leads collection. This is expected for new users.');
+            return null;
+          }
+        }
+        throw error;
+      }
+      
+      if (!emailSnapshot.empty) {
+        const leadDoc = emailSnapshot.docs[0];
+        const leadData = leadDoc.data();
+        
+        console.log(`✅ [SIGNUP] Found existing lead by email: ${leadDoc.id} with status: ${leadData.status}`);
+        
+        return {
+          id: leadDoc.id,
+          status: leadData.status,
+          source: leadData.source,
+          createdAt: leadData.createdAt,
+          assignedTo: leadData.assignedTo,
+          priority: leadData.priority,
+          totalInteractions: leadData.totalInteractions,
+          lastInteractionAt: leadData.lastInteractionAt,
+          timeline: leadData.timeline,
+          notes: leadData.notes,
+          tags: leadData.tags,
+        };
+      }
+      
+      // If no email match, try to find by phone number - NO UID FILTER
+      const phoneQuery = query(
+        leadsRef,
+        where('phone', '==', phone)
+      );
+      
+      let phoneSnapshot;
+      try {
+        phoneSnapshot = await getDocs(phoneQuery);
+      } catch (error: unknown) {
+        // Handle permission errors gracefully
+        if (error && typeof error === 'object' && 'code' in error) {
+          const firebaseError = error as { code: string };
+          if (firebaseError.code === 'permission-denied') {
+            console.warn('⚠️ [SIGNUP] Permission denied accessing leads by phone. This is expected for new users.');
+            return null;
+          }
+        }
+        throw error;
+      }
+      
+      if (!phoneSnapshot.empty) {
+        const leadDoc = phoneSnapshot.docs[0];
+        const leadData = leadDoc.data();
+        
+        console.log(`✅ [SIGNUP] Found existing lead by phone: ${leadDoc.id} with status: ${leadData.status}`);
+        
+        return {
+          id: leadDoc.id,
+          status: leadData.status,
+          source: leadData.source,
+          createdAt: leadData.createdAt,
+          assignedTo: leadData.assignedTo,
+          priority: leadData.priority,
+          totalInteractions: leadData.totalInteractions,
+          lastInteractionAt: leadData.lastInteractionAt,
+          timeline: leadData.timeline,
+          notes: leadData.notes,
+          tags: leadData.tags,
+        };
+      }
+      
+      console.log(`ℹ️ [SIGNUP] No existing lead found for email: ${email} or phone: ${phone}`);
+      return null;
+      
+    } catch (error: unknown) {
+      console.error('❌ [SIGNUP] Error searching for existing lead:', {
+        error: error instanceof Error ? error.message : 'Unknown error',
+        email,
+        phone,
+        timestamp: new Date().toISOString()
+      });
+      
+      // Don't throw error, just return null to proceed with creating new lead
+      return null;
+    }
+  }
+
+  /**
+   * Find existing lead by email or phone number (for authenticated users)
    * Prioritizes email match, then phone match
+   * Filters by UID for user-owned leads only
    */
   private async findExistingLead(email: string, phone: string): Promise<{
     id: string;

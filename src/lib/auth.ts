@@ -53,31 +53,22 @@ const createLeadFromSignup = async (
     
     const fullName = `${firstName || ""} ${lastName || ""}`.trim();
     
-    // 🔍 Step 1: Check for existing leads using the applicationService method
+    // 🔍 Step 1: Check for existing leads using the public signup method
     let existingLead = null;
     try {
       console.log(`🔍 Checking for existing lead with email: ${email} or phone: ${whatsappNumber}`);
-      // Access the private method through reflection (TypeScript workaround)
-      existingLead = await (studentApplicationService as unknown as { findExistingLead: (email: string, phone: string) => Promise<{
-        id: string;
-        status: string;
-        source: string;
-        createdAt: string;
-        assignedTo?: string;
-        priority?: string;
-        totalInteractions?: number;
-        lastInteractionAt?: string;
-        timeline?: Array<{
-          date: string;
-          action: string;
-          status: string;
-          notes: string;
-        }>;
-        notes?: string;
-        tags?: string[];
-      } | null> }).findExistingLead(email, whatsappNumber);
+      
+      // Use the new public method specifically designed for signup flow
+      // This method does NOT filter by UID, allowing us to find leads created by agents/chatbots
+      existingLead = await studentApplicationService.findExistingLeadForSignup(email, whatsappNumber);
+      
     } catch (duplicateCheckError) {
-      console.warn('⚠️ Error checking for existing leads, will proceed with creating new lead:', duplicateCheckError);
+      console.error('⚠️ Error checking for existing leads:', {
+        error: duplicateCheckError instanceof Error ? duplicateCheckError.message : 'Unknown error',
+        email,
+        phone: whatsappNumber,
+        timestamp: new Date().toISOString()
+      });
       // Continue with creating new lead if duplicate checking fails
     }
     
@@ -95,6 +86,8 @@ const createLeadFromSignup = async (
             status: LEAD_STATUSES.INTERESTED,
             updatedAt: new Date(),
             name: fullName, // Update name in case it's different
+            // 🔧 FIX: Update UID to the new user's UID for proper ownership
+            uid: user.uid,
           };
           
           // Add timeline entry for the status change
@@ -108,7 +101,8 @@ const createLeadFromSignup = async (
             metadata: {
               source: "APPLICANT_PORTAL_SIGNUP",
               submittedBy: submittedBy || "direct",
-              previousStatus: LEAD_STATUSES.CONTACTED
+              previousStatus: LEAD_STATUSES.CONTACTED,
+              newOwnerUid: user.uid, // Track ownership change
             }
           };
           
@@ -123,19 +117,26 @@ const createLeadFromSignup = async (
           return; // Exit early, no need to create new lead
           
         } catch (updateError) {
-          console.error(`❌ Error updating existing lead ${existingLead.id}:`, updateError);
+          console.error(`❌ CRITICAL: Failed to update existing lead ${existingLead.id}:`, {
+            error: updateError instanceof Error ? updateError.message : 'Unknown error',
+            leadId: existingLead.id,
+            email,
+            timestamp: new Date().toISOString()
+          });
           // Continue to create new lead if update fails
         }
       } 
       // Scenario: Lead already INTERESTED or higher status
       else if (existingLead.status === LEAD_STATUSES.INTERESTED) {
-        console.log(`ℹ️ Lead already has INTERESTED status, updating contact info if needed`);
+        console.log(`ℹ️ Lead already has INTERESTED status, updating contact info and ownership if needed`);
         
         try {
-          // Just update the name and add timeline entry for signup
+          // Update the name, UID ownership, and add timeline entry for signup
           const updateData: Record<string, unknown> = {
             updatedAt: new Date(),
             name: fullName, // Update name in case it's different
+            // 🔧 FIX: Update UID to the new user's UID for proper ownership
+            uid: user.uid,
           };
           
           // Add timeline entry for the signup attempt
@@ -148,7 +149,8 @@ const createLeadFromSignup = async (
               : "Applicant portal signup attempted for existing INTERESTED lead",
             metadata: {
               source: "APPLICANT_PORTAL_SIGNUP",
-              submittedBy: submittedBy || "direct"
+              submittedBy: submittedBy || "direct",
+              newOwnerUid: user.uid, // Track ownership transfer
             }
           };
           
@@ -157,20 +159,57 @@ const createLeadFromSignup = async (
           const leadRef = doc(db, 'leads', existingLead.id);
           await updateDoc(leadRef, updateData);
           
-          console.log(`✅ Updated existing INTERESTED lead ${existingLead.id} with signup info`);
+          console.log(`✅ Updated existing INTERESTED lead ${existingLead.id} with signup info and ownership`);
           return; // Exit early, no need to create new lead
           
         } catch (updateError) {
-          console.error(`❌ Error updating existing INTERESTED lead:`, updateError);
+          console.error(`❌ CRITICAL: Failed to update existing INTERESTED lead:`, {
+            error: updateError instanceof Error ? updateError.message : 'Unknown error',
+            leadId: existingLead.id,
+            email,
+            timestamp: new Date().toISOString()
+          });
           // Continue to create new lead if update fails
         }
       } 
       // Scenario: Lead has APPLIED or higher status  
       else {
-        console.log(`ℹ️ Lead already has status ${existingLead.status} (APPLIED or higher), skipping lead creation`);
-        // Could potentially throw an error here or show a message to user
-        // For now, we'll just log and return
-        return;
+        console.log(`ℹ️ Lead already has status ${existingLead.status} (APPLIED or higher), updating ownership only`);
+        
+        // Even for APPLIED+ leads, we should update the UID for ownership
+        try {
+          const updateData: Record<string, unknown> = {
+            updatedAt: new Date(),
+            uid: user.uid, // Transfer ownership to the new user
+          };
+          
+          const newTimelineEntry = {
+            date: new Date(),
+            action: "OWNERSHIP_TRANSFER",
+            status: existingLead.status,
+            notes: "Lead ownership transferred to student user account",
+            metadata: {
+              source: "APPLICANT_PORTAL_SIGNUP",
+              newOwnerUid: user.uid,
+            }
+          };
+          
+          updateData.timeline = [...(existingLead.timeline || []), newTimelineEntry];
+          
+          const leadRef = doc(db, 'leads', existingLead.id);
+          await updateDoc(leadRef, updateData);
+          
+          console.log(`✅ Transferred ownership of lead ${existingLead.id} to user ${user.uid}`);
+        } catch (updateError) {
+          console.error(`❌ Warning: Failed to transfer lead ownership:`, {
+            error: updateError instanceof Error ? updateError.message : 'Unknown error',
+            leadId: existingLead.id,
+            email,
+            timestamp: new Date().toISOString()
+          });
+        }
+        
+        return; // Exit early, no need to create new lead
       }
     }
     
@@ -190,6 +229,9 @@ const createLeadFromSignup = async (
       phone: whatsappNumber,
       whatsappNumber: whatsappNumber,
       
+      // 🔧 FIX: Set proper UID ownership for new user
+      uid: user.uid,
+      
       // Agent/Source attribution
       submittedBy: submittedBy || "direct",
       
@@ -205,7 +247,8 @@ const createLeadFromSignup = async (
           whatsappMessageSent: false,
           emailNotificationSent: false,
           submittedBy: submittedBy || "direct",
-          source: "APPLICANT_PORTAL_SIGNUP"
+          source: "APPLICANT_PORTAL_SIGNUP",
+          ownerUid: user.uid, // Track initial owner
         }
       }],
       
@@ -226,9 +269,21 @@ const createLeadFromSignup = async (
     console.log('✅ New lead created with ID:', leadDocRef.id, submittedBy ? `- Assisted by: ${submittedBy}` : '- Direct signup');
     
   } catch (error) {
-    console.error('❌ Error in lead creation/update from signup:', error);
-    // Don't throw error - lead creation failure shouldn't break signup
-    // Just log it for monitoring
+    console.error('❌ CRITICAL: Error in lead creation/update from signup:', {
+      error: error instanceof Error ? error.message : 'Unknown error',
+      stack: error instanceof Error ? error.stack : undefined,
+      email,
+      phone: whatsappNumber,
+      timestamp: new Date().toISOString(),
+      userUid: user.uid
+    });
+    
+    // 🚨 IMPORTANT: Don't throw error - lead creation failure shouldn't break signup
+    // The user account is already created, so we want them to be able to sign in
+    // We just log the error for monitoring and investigation
+    
+    // TODO: Consider sending this error to a monitoring service (e.g., Sentry, LogRocket)
+    // This will help track how often this happens and why
   }
 };
 
@@ -271,29 +326,17 @@ export const signUpWithEmail = async (
     // Create lead from signup with submittedBy info
     await createLeadFromSignup(user, firstName, lastName, email, whatsappNumber, submittedBy);
     
-    // Send custom branded welcome email instead of Firebase's default
-    try {
-      console.log('📧 Sending custom branded welcome email...');
-      const welcomeResult = await authEmailService.sendWelcomeEmail({
-        email: user.email || email,
-        userName: `${firstName} ${lastName}`,
-      });
-      
-      if (welcomeResult.success) {
-        console.log('✅ Custom welcome email sent successfully');
-      } else {
-        console.warn('⚠️ Custom welcome email failed:', welcomeResult.error);
-      }
-    } catch (emailError) {
-      console.warn('⚠️ Welcome email error:', emailError);
-    }
-
+    // ⚠️ NOTE: Welcome email is NOT sent during signup
+    // It will be sent automatically on first login via the dashboard welcome flow
+    // This prevents duplicate welcome emails (one during signup + one on first login)
+    
     // Send custom branded email verification instead of Firebase's default
     try {
       console.log('📧 Sending custom branded email verification...');
       const verificationResult = await authEmailService.sendCustomEmailVerification({
         email: user.email || email,
         userName: `${firstName} ${lastName}`,
+        phoneNumber: whatsappNumber, // 📱 Include phone number for WhatsApp notification
       });
       
       if (verificationResult.success) {
